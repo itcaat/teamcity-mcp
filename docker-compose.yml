@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  teamcity-server:
+    image: jetbrains/teamcity-server:2024.03
+    container_name: teamcity-server
+    ports:
+      - "8111:8111"
+    volumes:
+      - teamcity-server-datadir:/data/teamcity_server/datadir
+      - teamcity-server-logs:/opt/teamcity/logs
+    environment:
+      - TEAMCITY_SERVER_MEM_OPTS=-Xmx2g -XX:ReservedCodeCacheSize=350m
+    networks:
+      - teamcity-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8111/login.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  teamcity-agent:
+    image: jetbrains/teamcity-agent:2024.03
+    container_name: teamcity-agent
+    volumes:
+      - teamcity-agent-conf:/data/teamcity_agent/conf
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SERVER_URL=http://teamcity-server:8111
+      - AGENT_NAME=docker-agent
+    networks:
+      - teamcity-network
+    depends_on:
+      teamcity-server:
+        condition: service_healthy
+
+  teamcity-mcp:
+    build: .
+    container_name: teamcity-mcp
+    ports:
+      - "8123:8123"
+    environment:
+      - TC_URL=http://teamcity:8111
+      - TC_TOKEN=your-teamcity-token
+      - SERVER_SECRET=your-server-secret
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - CACHE_TTL=10s
+    networks:
+      - teamcity-network
+    depends_on:
+      teamcity-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  teamcity-server-datadir:
+  teamcity-server-logs:
+  teamcity-agent-conf:
+
+networks:
+  teamcity-network:
+    driver: bridge 
