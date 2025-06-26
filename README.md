@@ -2,7 +2,7 @@
 
 A comprehensive Model Context Protocol (MCP) server that exposes JetBrains TeamCity as structured AI-ready resources and tools for LLM agents and IDE plugins.
 
-## ✅ Quick Start
+## Quick Start
 
 ### 1. Build the Server
 
@@ -115,7 +115,7 @@ export CACHE_TTL=30s
 
 ```bash
 # Build Docker image
-make docker-build
+make docker
 
 # Run with environment variables
 docker run -p 8123:8123 \
@@ -259,16 +259,68 @@ pkill -f teamcity-mcp
 
 ```bash
 # Install dependencies
-go mod download
+make deps
 
 # Run unit tests
 make test
 
+# Run integration tests
+make test-integration
+
+# Run load tests
+make test-load
+
 # Run linter
 make lint
 
-# Build for multiple platforms
-make build-all
+# Format code
+make format
+
+# Clean build artifacts
+make clean
+```
+
+### Available Make Commands
+
+Use `make help` to see all available commands:
+
+```bash
+# Basic commands
+make build                # Build the binary
+make test                 # Run tests
+make clean                # Clean build artifacts
+make deps                 # Download dependencies
+make lint                 # Run linters
+make format               # Format code
+
+# Docker commands
+make docker               # Build Docker image
+make docker-push          # Push Docker image
+
+# Running commands
+make run                  # Run the application
+make run-stdio            # Run in STDIO mode
+make dev                  # Run in development mode with hot reload
+
+# Docker Compose commands
+make compose-up           # Start services with Docker Compose
+make compose-down         # Stop services
+make compose-logs         # Show logs
+
+# Testing commands
+make test-integration     # Run integration tests with Docker
+make test-load            # Run load tests
+
+# Development tools
+make install-tools        # Install development tools
+
+# Release commands
+make release-snapshot     # Build snapshot release with GoReleaser
+make release-check        # Check GoReleaser configuration
+
+# CI commands
+make ci                   # Run CI checks (deps, lint, test, build)
+make check                # Run all checks (lint, test, build)
 ```
 
 ## MCP Protocol Testing
@@ -562,7 +614,7 @@ Add this to your Cursor MCP settings:
       "TC_URL",
       "-e",
       "TC_TOKEN",
-      "teamcity-mcp:latest",
+      "itcaat/teamcity-mcp:latest",
       "--transport",
       "stdio"
     ],
@@ -708,22 +760,22 @@ export SERVER_SECRET=$(cat /var/secrets/server-secret)
 
 ## Expected Behaviors
 
-### ✅ Healthy Server
+### Healthy Server
 - Health endpoint returns `{"status":"ok"}`
 - Metrics endpoint returns Prometheus format
 - Server logs show successful startup
 
-### ✅ MCP Protocol
+### MCP Protocol
 - Initialize returns protocol version `2025-03-26`
 - Resources list includes projects, buildTypes, builds, agents
 - Tools list includes all 5 build management tools
 
-### ✅ TeamCity Integration
+### TeamCity Integration
 - Can fetch projects, build types, builds, agents
 - Authentication works with API token
 - Build operations execute successfully
 
-### ✅ Performance
+### Performance
 - Health check responds in <100ms
 - Resource queries cached for 10s TTL
 - Concurrent requests handled properly
