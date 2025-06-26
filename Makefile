@@ -114,6 +114,21 @@ install-tools:
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@go install golang.org/x/tools/cmd/goimports@latest
 	@go install github.com/cosmtrek/air@latest
+	@go install github.com/goreleaser/goreleaser@latest
+
+## release-snapshot: Build snapshot release with GoReleaser
+release-snapshot:
+	@echo "Building snapshot release..."
+	@goreleaser release --snapshot --clean
+
+## release-check: Check GoReleaser configuration
+release-check:
+	@echo "Checking GoReleaser configuration..."
+	@goreleaser check
+
+## ci: Run CI checks (same as check but more verbose)
+ci: deps lint test build
+	@echo "CI checks completed successfully!"
 
 ## check: Run all checks (lint, test, build)
 check: lint test build
