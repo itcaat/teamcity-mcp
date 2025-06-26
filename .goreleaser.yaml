@@ -1,0 +1,108 @@
+version: 2
+
+project_name: teamcity-mcp
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: teamcity-mcp
+    main: ./cmd/server
+    binary: teamcity-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+
+archives:
+  - id: teamcity-mcp
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+# Docker builds removed - use manual docker build with the single Dockerfile
+# docker build -t itcaat/teamcity-mcp:latest .
+# docker push itcaat/teamcity-mcp:latest
+
+release:
+  github:
+    owner: itcaat
+    name: teamcity-mcp
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## TeamCity MCP Server {{ .Tag }}
+    
+    Welcome to this new release of TeamCity MCP Server!
+    
+    ### Docker Images
+    
+    ```bash
+    docker pull itcaat/teamcity-mcp:{{ .Tag }}
+    docker pull itcaat/teamcity-mcp:latest
+    ```
+    
+    ### Installation
+    
+    Download the appropriate binary for your platform from the assets below.
+    
+  footer: |
+    ## Thanks!
+    
+    Those were the changes on {{ .Tag }}!
+    
+    **Full Changelog**: https://github.com/itcaat/teamcity-mcp/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+announce:
+  skip: true 
