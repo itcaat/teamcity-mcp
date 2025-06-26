@@ -4,6 +4,42 @@ A comprehensive Model Context Protocol (MCP) server that exposes JetBrains TeamC
 
 ## Quick Start
 
+### IDE Integration (Cursor)
+
+The TeamCity MCP server is designed to work seamlessly with AI-powered IDEs like Cursor. Here's how to configure it:
+
+#### Cursor Configuration
+
+Add this to your Cursor MCP settings:
+
+```json
+{
+  "mcpServers": {
+      "teamcity": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "TC_URL",
+          "-e",
+          "TC_TOKEN",
+          "itcaat/teamcity-mcp:latest",
+          "--transport",
+          "stdio"
+        ],
+        "env": {
+          "TC_URL": "https://your-teamcity-server.com",
+          "TC_TOKEN": "your-teamcity-api-token"
+        }
+      }
+    }
+}    
+```
+
+## Local Development
+
 ### 1. Build the Server
 
 ```bash
@@ -594,38 +630,6 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
-## IDE Integration (Cursor)
-
-The TeamCity MCP server is designed to work seamlessly with AI-powered IDEs like Cursor. Here's how to configure it:
-
-### Cursor Configuration
-
-Add this to your Cursor MCP settings:
-
-```json
-{
-  "teamcity": {
-    "command": "docker",
-    "args": [
-      "run",
-      "--rm",
-      "-i",
-      "-e",
-      "TC_URL",
-      "-e",
-      "TC_TOKEN",
-      "itcaat/teamcity-mcp:latest",
-      "--transport",
-      "stdio"
-    ],
-    "env": {
-      "TC_URL": "https://your-teamcity-server.com",
-      "TC_TOKEN": "your-teamcity-api-token"
-    }
-  }
-}
-```
-
 ### Local Binary Configuration
 
 If you prefer to use the local binary instead of Docker:
@@ -733,73 +737,6 @@ curl -H "Authorization: Bearer your-token" \
 curl -H "Authorization: Bearer your-token" \
   http://your-teamcity-url/app/rest/server
 ```
-
-## Security Best Practices
-
-1. **Never hardcode secrets in scripts or Dockerfiles**
-2. **Use secret management systems in production**
-3. **Rotate API tokens regularly**
-4. **Use TLS in production environments**
-5. **Restrict network access to the MCP server**
-
-### Secret Management Examples
-
-```bash
-# AWS Secrets Manager
-export TC_TOKEN=$(aws secretsmanager get-secret-value --secret-id teamcity/api-token --query SecretString --output text)
-export SERVER_SECRET=$(aws secretsmanager get-secret-value --secret-id mcp/server-secret --query SecretString --output text)
-
-# HashiCorp Vault
-export TC_TOKEN=$(vault kv get -field=token secret/teamcity)
-export SERVER_SECRET=$(vault kv get -field=secret secret/mcp)
-
-# Kubernetes secrets (automatically mounted)
-export TC_TOKEN=$(cat /var/secrets/teamcity-token)
-export SERVER_SECRET=$(cat /var/secrets/server-secret)
-```
-
-## Expected Behaviors
-
-### Healthy Server
-- Health endpoint returns `{"status":"ok"}`
-- Metrics endpoint returns Prometheus format
-- Server logs show successful startup
-
-### MCP Protocol
-- Initialize returns protocol version `2025-03-26`
-- Resources list includes projects, buildTypes, builds, agents
-- Tools list includes all 5 build management tools
-
-### TeamCity Integration
-- Can fetch projects, build types, builds, agents
-- Authentication works with API token
-- Build operations execute successfully
-
-### Performance
-- Health check responds in <100ms
-- Resource queries cached for 10s TTL
-- Concurrent requests handled properly
-
-### ❌ Error Indicators
-
-**Server Issues**:
-- Health endpoint returns 500 or connection refused
-- Logs show startup errors or panics
-- Metrics endpoint not accessible
-
-**MCP Protocol Issues**:
-- JSON-RPC errors in responses
-- Missing required fields in protocol messages
-- Unsupported protocol version
-
-**TeamCity Issues**:
-- Authentication failures (401/403)
-- Network connectivity problems
-- Invalid TeamCity URL or API responses
-
-**Configuration Issues**:
-- Missing required environment variables (TC_URL)
-- Invalid environment variable formats (timeouts, durations)
 
 ## Protocol Reference
 
