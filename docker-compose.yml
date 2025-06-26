@@ -43,7 +43,7 @@ services:
     environment:
       - TC_URL=http://teamcity:8111
       - TC_TOKEN=your-teamcity-token
-      - SERVER_SECRET=your-server-secret
+      # - SERVER_SECRET=your-server-secret  # Optional - enables HMAC auth
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - CACHE_TTL=10s

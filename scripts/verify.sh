@@ -19,7 +19,7 @@ SECRET="test-secret"
 # Set default environment variables for testing
 export TC_URL="${TC_URL:-http://localhost:8111}"
 export TC_TOKEN="${TC_TOKEN:-test-token}"
-export SERVER_SECRET="${SERVER_SECRET:-test-secret}"
+export SERVER_SECRET="${SERVER_SECRET:-test-secret}"  # Optional - enables auth
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 
 # Function to print colored output

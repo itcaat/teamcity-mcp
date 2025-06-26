@@ -248,11 +248,17 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("# Metrics endpoint placeholder\n"))
 }
 
-// authMiddleware provides HMAC-based authentication
+// authMiddleware provides HMAC-based authentication (optional)
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip auth for health endpoints
 		if strings.HasPrefix(r.URL.Path, "/health") || strings.HasPrefix(r.URL.Path, "/ready") || strings.HasPrefix(r.URL.Path, "/metrics") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// If no server secret is configured, skip authentication
+		if s.cfg.Server.ServerSecret == "" {
 			next.ServeHTTP(w, r)
 			return
 		}

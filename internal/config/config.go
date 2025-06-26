@@ -101,9 +101,7 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("either TC_TOKEN or both TC_USERNAME and TC_PASSWORD environment variables are required")
 	}
 
-	if cfg.Server.ServerSecret == "" {
-		return fmt.Errorf("SERVER_SECRET environment variable is required for client authentication")
-	}
+	// SERVER_SECRET is now optional - if not provided, authentication will be disabled
 
 	// Validate timeout format
 	if _, err := time.ParseDuration(cfg.TeamCity.Timeout); err != nil {
@@ -124,7 +122,6 @@ func PrintEnvHelp() {
 	fmt.Println()
 	fmt.Println("Required:")
 	fmt.Println("  TC_URL          TeamCity server URL (e.g., https://your-teamcity-server.com)")
-	fmt.Println("  SERVER_SECRET   Server secret for HMAC token validation")
 	fmt.Println()
 	fmt.Println("Authentication (choose one):")
 	fmt.Println("  TC_TOKEN        TeamCity API token (preferred)")
@@ -132,6 +129,7 @@ func PrintEnvHelp() {
 	fmt.Println("  TC_PASSWORD     TeamCity password (fallback)")
 	fmt.Println()
 	fmt.Println("Optional:")
+	fmt.Println("  SERVER_SECRET   Server secret for HMAC token validation (if not set, auth is disabled)")
 	fmt.Println("  LISTEN_ADDR     Address to listen on (default: :8123)")
 	fmt.Println("  TC_TIMEOUT      HTTP timeout for TeamCity API calls (default: 30s)")
 	fmt.Println("  TLS_CERT        Path to TLS certificate file")
@@ -143,6 +141,6 @@ func PrintEnvHelp() {
 	fmt.Println("Example:")
 	fmt.Println("  export TC_URL=https://your-teamcity-server.com")
 	fmt.Println("  export TC_TOKEN=your-teamcity-api-token")
-	fmt.Println("  export SERVER_SECRET=your-hmac-secret-key")
+	fmt.Println("  # export SERVER_SECRET=your-hmac-secret-key  # Optional - enables auth")
 	fmt.Println("  ./server")
 }

@@ -16,6 +16,8 @@ make build
 ```bash
 # Required
 export TC_URL="https://your-teamcity-server.com"
+
+# Optional (enables HMAC authentication)
 export SERVER_SECRET="your-hmac-secret-key"
 
 # Authentication (choose one method)
@@ -63,7 +65,7 @@ curl -X POST http://localhost:8123/mcp \
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `TC_URL` | TeamCity server URL | `https://teamcity.company.com` |
-| `SERVER_SECRET` | HMAC secret for client authentication | `my-secure-secret-123` |
+| `SERVER_SECRET` | HMAC secret for client authentication (optional) | `my-secure-secret-123` |
 
 ### Authentication Variables (Choose One Method)
 
@@ -482,7 +484,7 @@ export SERVER_SECRET=$(cat /var/secrets/server-secret)
 - Invalid TeamCity URL or API responses
 
 **Configuration Issues**:
-- Missing required environment variables (TC_URL, SERVER_SECRET)
+- Missing required environment variables (TC_URL)
 - Invalid environment variable formats (timeouts, durations)
 
 ## Protocol Reference
