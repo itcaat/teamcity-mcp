@@ -16,11 +16,9 @@ type Config struct {
 
 // TeamCityConfig holds TeamCity connection settings
 type TeamCityConfig struct {
-	URL      string
-	Token    string
-	Username string // fallback for basic auth
-	Password string // fallback for basic auth
-	Timeout  string
+	URL     string
+	Token   string
+	Timeout string
 }
 
 // ServerConfig holds server settings
@@ -83,8 +81,6 @@ func loadFromEnv(cfg *Config) {
 	// TeamCity configuration
 	cfg.TeamCity.URL = os.Getenv("TC_URL")
 	cfg.TeamCity.Token = os.Getenv("TC_TOKEN")
-	cfg.TeamCity.Username = os.Getenv("TC_USERNAME")
-	cfg.TeamCity.Password = os.Getenv("TC_PASSWORD")
 
 	// Server configuration
 	cfg.Server.TLSCert = os.Getenv("TLS_CERT")
@@ -97,8 +93,8 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("TC_URL environment variable is required")
 	}
 
-	if cfg.TeamCity.Token == "" && (cfg.TeamCity.Username == "" || cfg.TeamCity.Password == "") {
-		return fmt.Errorf("either TC_TOKEN or both TC_USERNAME and TC_PASSWORD environment variables are required")
+	if cfg.TeamCity.Token == "" {
+		return fmt.Errorf("TC_TOKEN environment variable is required")
 	}
 
 	// SERVER_SECRET is now optional - if not provided, authentication will be disabled
@@ -123,10 +119,8 @@ func PrintEnvHelp() {
 	fmt.Println("Required:")
 	fmt.Println("  TC_URL          TeamCity server URL (e.g., https://your-teamcity-server.com)")
 	fmt.Println()
-	fmt.Println("Authentication (choose one):")
-	fmt.Println("  TC_TOKEN        TeamCity API token (preferred)")
-	fmt.Println("  TC_USERNAME     TeamCity username (fallback)")
-	fmt.Println("  TC_PASSWORD     TeamCity password (fallback)")
+	fmt.Println("Authentication:")
+	fmt.Println("  TC_TOKEN        TeamCity API token")
 	fmt.Println()
 	fmt.Println("Optional:")
 	fmt.Println("  SERVER_SECRET   Server secret for HMAC token validation (if not set, auth is disabled)")

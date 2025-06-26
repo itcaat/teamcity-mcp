@@ -100,8 +100,7 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 	// Set authentication
 	if c.cfg.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.cfg.Token)
-	} else if c.cfg.Username != "" && c.cfg.Password != "" {
-		req.SetBasicAuth(c.cfg.Username, c.cfg.Password)
+
 	}
 
 	req.Header.Set("Accept", "application/json")

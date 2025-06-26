@@ -319,16 +319,10 @@ HMAC-SHA256(message="teamcity-mcp", secret=server_secret)
 
 ### MCP Server to TeamCity
 
-Supports both token-based and basic authentication:
+Uses TeamCity API token authentication:
 
-**Token Authentication** (Preferred):
 ```http
-Authorization: Bearer <teamcity_token>
-```
-
-**Basic Authentication** (Fallback):
-```http
-Authorization: Basic <base64(username:password)>
+Authorization: Bearer <teamcity_api_token>
 ```
 
 ## Error Handling

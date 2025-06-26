@@ -20,11 +20,8 @@ export TC_URL="https://your-teamcity-server.com"
 # Optional (enables HMAC authentication)
 export SERVER_SECRET="your-hmac-secret-key"
 
-# Authentication (choose one method)
-export TC_TOKEN="your-teamcity-api-token"        # Preferred
-# OR
-export TC_USERNAME="your-username"               # Fallback
-export TC_PASSWORD="your-password"               # Fallback
+# Authentication
+export TC_TOKEN="your-teamcity-api-token"
 ```
 
 ### 3. Run the Server
@@ -68,18 +65,11 @@ curl -X POST http://localhost:8123/mcp \
 | `TC_URL` | TeamCity server URL | `https://teamcity.company.com` |
 | `SERVER_SECRET` | HMAC secret for client authentication (optional) | `my-secure-secret-123` |
 
-### Authentication Variables (Choose One Method)
+### Authentication Variables
 
-**Method 1: API Token (Recommended)**
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `TC_TOKEN` | TeamCity API token | `eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...` |
-
-**Method 2: Basic Authentication (Fallback)**
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TC_USERNAME` | TeamCity username | `admin` |
-| `TC_PASSWORD` | TeamCity password | `password123` |
 
 ### Optional Variables
 
@@ -635,9 +625,9 @@ The server exposes TeamCity data as MCP resources:
 
 2. **Authentication failures**
    ```
-   Error: either TC_TOKEN or both TC_USERNAME and TC_PASSWORD environment variables are required
+   Error: TC_TOKEN environment variable is required
    ```
-   **Solution**: Set either `TC_TOKEN` or both `TC_USERNAME` and `TC_PASSWORD`
+   **Solution**: Set `TC_TOKEN` with your TeamCity API token
 
 3. **Invalid timeout format**
    ```
@@ -730,7 +720,7 @@ export SERVER_SECRET=$(cat /var/secrets/server-secret)
 
 ### ✅ TeamCity Integration
 - Can fetch projects, build types, builds, agents
-- Authentication works with token/basic auth
+- Authentication works with API token
 - Build operations execute successfully
 
 ### ✅ Performance
