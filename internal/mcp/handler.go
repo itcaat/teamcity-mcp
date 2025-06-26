@@ -62,6 +62,8 @@ func (h *Handler) HandleRequest(ctx context.Context, req json.RawMessage) (inter
 		return h.handleInitialize(baseReq.ID, baseReq.Params)
 	case "initialized":
 		return h.handleInitialized(baseReq.ID)
+	case "notifications/initialized":
+		return h.handleInitialized(baseReq.ID)
 	case "resources/list":
 		return h.handleResourcesList(ctx, baseReq.ID, baseReq.Params)
 	case "resources/read":
@@ -73,6 +75,7 @@ func (h *Handler) HandleRequest(ctx context.Context, req json.RawMessage) (inter
 	case "ping":
 		return h.handlePing(baseReq.ID)
 	default:
+		h.logger.Warn("Unknown method called", "method", baseReq.Method, "id", baseReq.ID)
 		return h.errorResponse(baseReq.ID, -32601, "Method not found", nil), nil
 	}
 }
