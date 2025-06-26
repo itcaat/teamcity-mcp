@@ -16,14 +16,19 @@ import (
 )
 
 var (
-	transport = flag.String("transport", "http", "Transport mode: http or stdio")
-	version   = flag.Bool("version", false, "Show version information")
-	envHelp   = flag.Bool("help", false, "Show environment variable help")
+	transport   = flag.String("transport", "http", "Transport mode: http or stdio")
+	versionFlag = flag.Bool("version", false, "Show version information")
+	envHelp     = flag.Bool("help", false, "Show environment variable help")
+
+	// Build-time variables set by GoReleaser
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
 )
 
 const (
-	appName    = "teamcity-mcp"
-	appVersion = "1.0.0"
+	appName = "teamcity-mcp"
 )
 
 func init() {
@@ -40,8 +45,11 @@ func init() {
 func main() {
 	flag.Parse()
 
-	if *version {
-		fmt.Printf("%s version %s\n", appName, appVersion)
+	if *versionFlag {
+		fmt.Printf("%s version %s\n", appName, version)
+		fmt.Printf("  commit: %s\n", commit)
+		fmt.Printf("  built at: %s\n", date)
+		fmt.Printf("  built by: %s\n", builtBy)
 		os.Exit(0)
 	}
 
@@ -98,7 +106,8 @@ func main() {
 
 	// Start server
 	logger.Info("Starting TeamCity MCP server",
-		"version", appVersion,
+		"version", version,
+		"commit", commit,
 		"transport", *transport,
 		"teamcity_url", cfg.TeamCity.URL)
 
