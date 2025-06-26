@@ -523,3 +523,128 @@ func (c *Client) DownloadArtifact(ctx context.Context, args json.RawMessage) (st
 	// In practice, you would stream the artifact content
 	return fmt.Sprintf("Artifact %s from build %s download initiated", req.ArtifactPath, req.BuildID), nil
 }
+
+// SearchBuilds searches for builds with various filters
+func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		BuildTypeID string   `json:"buildTypeId"`
+		Status      string   `json:"status"`
+		State       string   `json:"state"`
+		Branch      string   `json:"branch"`
+		Agent       string   `json:"agent"`
+		User        string   `json:"user"`
+		SinceBuild  string   `json:"sinceBuild"`
+		SinceDate   string   `json:"sinceDate"`
+		UntilDate   string   `json:"untilDate"`
+		Tags        []string `json:"tags"`
+		Personal    *bool    `json:"personal"`
+		Pinned      *bool    `json:"pinned"`
+		Count       int      `json:"count"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("search_builds", "success", time.Since(start).Seconds())
+	}()
+
+	// Build query parameters
+	params := make([]string, 0)
+
+	if req.BuildTypeID != "" {
+		params = append(params, fmt.Sprintf("buildType:%s", req.BuildTypeID))
+	}
+	if req.Status != "" {
+		params = append(params, fmt.Sprintf("status:%s", req.Status))
+	}
+	if req.State != "" {
+		params = append(params, fmt.Sprintf("state:%s", req.State))
+	}
+	if req.Branch != "" {
+		params = append(params, fmt.Sprintf("branch:%s", req.Branch))
+	}
+	if req.Agent != "" {
+		params = append(params, fmt.Sprintf("agent:%s", req.Agent))
+	}
+	if req.User != "" {
+		params = append(params, fmt.Sprintf("user:%s", req.User))
+	}
+	if req.SinceBuild != "" {
+		params = append(params, fmt.Sprintf("sinceBuild:%s", req.SinceBuild))
+	}
+	if req.SinceDate != "" {
+		params = append(params, fmt.Sprintf("sinceDate:%s", req.SinceDate))
+	}
+	if req.UntilDate != "" {
+		params = append(params, fmt.Sprintf("untilDate:%s", req.UntilDate))
+	}
+	if req.Personal != nil {
+		params = append(params, fmt.Sprintf("personal:%t", *req.Personal))
+	}
+	if req.Pinned != nil {
+		params = append(params, fmt.Sprintf("pinned:%t", *req.Pinned))
+	}
+
+	for _, tag := range req.Tags {
+		params = append(params, fmt.Sprintf("tag:%s", tag))
+	}
+
+	// Set default count if not specified
+	count := req.Count
+	if count == 0 {
+		count = 100
+	}
+
+	// Build endpoint with locator
+	endpoint := "/builds"
+	if len(params) > 0 {
+		locator := fmt.Sprintf("count:%d", count)
+		for _, param := range params {
+			locator += "," + param
+		}
+		endpoint += "?locator=" + locator
+	} else {
+		endpoint += fmt.Sprintf("?locator=count:%d", count)
+	}
+
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to search builds: %w", err)
+	}
+
+	var response struct {
+		Count int     `json:"count"`
+		Build []Build `json:"build"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return "", fmt.Errorf("failed to parse builds response: %w", err)
+	}
+
+	// Format response
+	result := fmt.Sprintf("Found %d builds:\n\n", response.Count)
+	for _, build := range response.Build {
+		result += fmt.Sprintf("Build #%s (ID: %d)\n", build.Number, build.ID)
+		result += fmt.Sprintf("  Status: %s\n", build.Status)
+		result += fmt.Sprintf("  State: %s\n", build.State)
+		result += fmt.Sprintf("  Build Type: %s (%s)\n", build.BuildType.Name, build.BuildTypeID)
+		if build.BranchName != "" {
+			result += fmt.Sprintf("  Branch: %s\n", build.BranchName)
+		}
+		if build.StartDate != "" {
+			result += fmt.Sprintf("  Started: %s\n", build.StartDate)
+		}
+		if build.FinishDate != "" {
+			result += fmt.Sprintf("  Finished: %s\n", build.FinishDate)
+		}
+		result += "\n"
+	}
+
+	if response.Count == 0 {
+		result = "No builds found matching the specified criteria."
+	}
+
+	return result, nil
+}

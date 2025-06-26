@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pin_build` - Pin/unpin builds to prevent cleanup
 - `set_build_tag` - Add or remove build tags
 - `download_artifact` - Download build artifacts
+- `search_builds` - Search builds with comprehensive filters (status, branch, user, dates, tags, etc.)
 
 ### Technical Features
 - Graceful shutdown with SIGTERM/SIGINT handling

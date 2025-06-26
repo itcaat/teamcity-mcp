@@ -252,6 +252,70 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				"required": []string{"buildId", "artifactPath"},
 			},
 		},
+		{
+			"name":        "search_builds",
+			"description": "Search for builds with various filters",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"buildTypeId": map[string]interface{}{
+						"type":        "string",
+						"description": "Build configuration ID to filter by",
+					},
+					"status": map[string]interface{}{
+						"type":        "string",
+						"description": "Build status: SUCCESS, FAILURE, ERROR, UNKNOWN",
+					},
+					"state": map[string]interface{}{
+						"type":        "string",
+						"description": "Build state: queued, running, finished",
+					},
+					"branch": map[string]interface{}{
+						"type":        "string",
+						"description": "Branch name to filter by",
+					},
+					"agent": map[string]interface{}{
+						"type":        "string",
+						"description": "Agent name to filter by",
+					},
+					"user": map[string]interface{}{
+						"type":        "string",
+						"description": "User who triggered the build",
+					},
+					"sinceBuild": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds since this build ID",
+					},
+					"sinceDate": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds since this date (YYYYMMDDTHHMMSS+HHMM)",
+					},
+					"untilDate": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds until this date (YYYYMMDDTHHMMSS+HHMM)",
+					},
+					"tags": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Tags to filter by",
+					},
+					"personal": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Include personal builds",
+					},
+					"pinned": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by pinned status",
+					},
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of builds to return (default: 100)",
+						"minimum":     1,
+						"maximum":     1000,
+					},
+				},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -351,6 +415,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.SetBuildTag(ctx, args)
 	case "download_artifact":
 		return h.tc.DownloadArtifact(ctx, args)
+	case "search_builds":
+		return h.tc.SearchBuilds(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

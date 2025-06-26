@@ -54,7 +54,8 @@ curl -X POST http://localhost:8123/mcp \
 - **MCP Protocol Compliance**: Full JSON-RPC 2.0 over HTTP/WebSocket support
 - **TeamCity Integration**: Complete REST API integration with authentication
 - **Resource Access**: Projects, build types, builds, agents, and artifacts
-- **Build Operations**: Trigger, cancel, pin builds, set tags, download artifacts
+- **Build Operations**: Trigger, cancel, pin builds, set tags, download artifacts, search builds
+- **Advanced Search**: Comprehensive build search with multiple filters (status, branch, user, dates, tags)
 - **Production Ready**: Docker, Kubernetes, monitoring, caching, and comprehensive logging
 - **Environment-Based Configuration**: No config files needed, everything via environment variables
 
@@ -331,8 +332,19 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
-### Trigger Build
+## Available Tools
 
+The TeamCity MCP server provides 6 powerful tools for managing builds:
+
+### 1. trigger_build
+Trigger a new build in TeamCity.
+
+**Parameters:**
+- `buildTypeId` (required): Build configuration ID
+- `branchName` (optional): Branch name to build
+- `properties` (optional): Build properties object
+
+**Example:**
 ```bash
 curl -X POST http://localhost:8123/mcp \
   -H "Content-Type: application/json" \
@@ -345,11 +357,271 @@ curl -X POST http://localhost:8123/mcp \
       "name": "trigger_build",
       "arguments": {
         "buildTypeId": "YourProject_BuildConfiguration",
-        "parameters": {}
+        "branchName": "main",
+        "properties": {
+          "env.DEPLOY_ENV": "staging"
+        }
       }
     }
   }'
 ```
+
+### 2. cancel_build
+Cancel a running build.
+
+**Parameters:**
+- `buildId` (required): Build ID to cancel
+- `comment` (optional): Cancellation comment
+
+**Example:**
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "cancel_build",
+      "arguments": {
+        "buildId": "12345",
+        "comment": "Cancelled due to urgent hotfix"
+      }
+    }
+  }'
+```
+
+### 3. pin_build
+Pin or unpin a build to prevent it from being cleaned up.
+
+**Parameters:**
+- `buildId` (required): Build ID to pin/unpin
+- `pin` (required): true to pin, false to unpin
+- `comment` (optional): Pin comment
+
+**Example:**
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "tools/call",
+    "params": {
+      "name": "pin_build",
+      "arguments": {
+        "buildId": "12345",
+        "pin": true,
+        "comment": "Release candidate build"
+      }
+    }
+  }'
+```
+
+### 4. set_build_tag
+Add or remove tags from a build.
+
+**Parameters:**
+- `buildId` (required): Build ID
+- `tags` (optional): Array of tags to add
+- `removeTags` (optional): Array of tags to remove
+
+**Example:**
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "set_build_tag",
+      "arguments": {
+        "buildId": "12345",
+        "tags": ["release", "v1.2.3"],
+        "removeTags": ["beta"]
+      }
+    }
+  }'
+```
+
+### 5. download_artifact
+Download build artifacts.
+
+**Parameters:**
+- `buildId` (required): Build ID
+- `artifactPath` (required): Path to the artifact
+
+**Example:**
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "tools/call",
+    "params": {
+      "name": "download_artifact",
+      "arguments": {
+        "buildId": "12345",
+        "artifactPath": "dist/app.zip"
+      }
+    }
+  }'
+```
+
+### 6. search_builds
+Search for builds with comprehensive filtering options.
+
+**Parameters (all optional):**
+- `buildTypeId`: Filter by build configuration ID
+- `status`: Filter by build status (SUCCESS, FAILURE, ERROR, UNKNOWN)
+- `state`: Filter by build state (queued, running, finished)
+- `branch`: Filter by branch name
+- `agent`: Filter by agent name
+- `user`: Filter by user who triggered the build
+- `sinceBuild`: Search builds since this build ID
+- `sinceDate`: Search builds since this date (YYYYMMDDTHHMMSS+HHMM)
+- `untilDate`: Search builds until this date (YYYYMMDDTHHMMSS+HHMM)
+- `tags`: Array of tags to filter by
+- `personal`: Include personal builds (boolean)
+- `pinned`: Filter by pinned status (boolean)
+- `count`: Maximum number of builds to return (1-1000, default: 100)
+
+**Examples:**
+
+Search for failed builds:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/call",
+    "params": {
+      "name": "search_builds",
+      "arguments": {
+        "status": "FAILURE",
+        "count": 10
+      }
+    }
+  }'
+```
+
+Search for recent builds on main branch:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 10,
+    "method": "tools/call",
+    "params": {
+      "name": "search_builds",
+      "arguments": {
+        "branch": "main",
+        "state": "finished",
+        "count": 20
+      }
+    }
+  }'
+```
+
+Search for builds with specific tags:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "tools/call",
+    "params": {
+      "name": "search_builds",
+      "arguments": {
+        "tags": ["release", "production"],
+        "pinned": true
+      }
+    }
+  }'
+```
+
+## IDE Integration (Cursor)
+
+The TeamCity MCP server is designed to work seamlessly with AI-powered IDEs like Cursor. Here's how to configure it:
+
+### Cursor Configuration
+
+Add this to your Cursor MCP settings:
+
+```json
+{
+  "teamcity": {
+    "command": "docker",
+    "args": [
+      "run",
+      "--rm",
+      "-i",
+      "-e",
+      "TC_URL",
+      "-e",
+      "TC_TOKEN",
+      "teamcity-mcp:latest",
+      "--transport",
+      "stdio"
+    ],
+    "env": {
+      "TC_URL": "https://your-teamcity-server.com",
+      "TC_TOKEN": "your-teamcity-api-token"
+    }
+  }
+}
+```
+
+### Local Binary Configuration
+
+If you prefer to use the local binary instead of Docker:
+
+```json
+{
+  "teamcity": {
+    "command": "/path/to/teamcity-mcp",
+    "args": ["--transport", "stdio"],
+    "env": {
+      "TC_URL": "https://your-teamcity-server.com",
+      "TC_TOKEN": "your-teamcity-api-token"
+    }
+  }
+}
+```
+
+### Usage in Cursor
+
+Once configured, you can use natural language commands like:
+
+- **"Search for failed builds in the last week"**
+- **"Trigger a build for the main branch"**
+- **"Show me recent builds for project X"**
+- **"Pin the latest successful build"**
+- **"Cancel the running build 12345"**
+- **"Add a release tag to build 12345"**
+
+The AI will automatically use the appropriate TeamCity tools to fulfill your requests.
+
+## Available Resources
+
+The server exposes TeamCity data as MCP resources:
+
+- **`teamcity://projects`** - List all projects
+- **`teamcity://buildTypes`** - List all build configurations
+- **`teamcity://builds`** - List recent builds
+- **`teamcity://agents`** - List build agents
 
 ## Troubleshooting
 
