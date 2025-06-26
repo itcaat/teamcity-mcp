@@ -12,8 +12,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"teamcity-mcp/internal/config"
-	"teamcity-mcp/internal/metrics"
+	"github.com/itcaat/teamcity-mcp/internal/config"
+	"github.com/itcaat/teamcity-mcp/internal/metrics"
 )
 
 // Client wraps the TeamCity REST API client

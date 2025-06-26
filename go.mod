@@ -1,4 +1,4 @@
-module teamcity-mcp
+module github.com/itcaat/teamcity-mcp
 
 go 1.22
 

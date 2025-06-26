@@ -8,9 +8,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"teamcity-mcp/internal/cache"
-	"teamcity-mcp/internal/metrics"
-	"teamcity-mcp/internal/teamcity"
+	"github.com/itcaat/teamcity-mcp/internal/cache"
+	"github.com/itcaat/teamcity-mcp/internal/metrics"
+	"github.com/itcaat/teamcity-mcp/internal/teamcity"
 )
 
 // Handler handles MCP protocol messages

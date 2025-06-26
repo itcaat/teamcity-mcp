@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"teamcity-mcp/internal/config"
-	"teamcity-mcp/internal/metrics"
+	"github.com/itcaat/teamcity-mcp/internal/config"
+	"github.com/itcaat/teamcity-mcp/internal/metrics"
 )
 
 // Cache provides in-memory caching with TTL

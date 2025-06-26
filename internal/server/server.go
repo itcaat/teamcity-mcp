@@ -18,12 +18,12 @@ import (
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 
-	"teamcity-mcp/internal/cache"
-	"teamcity-mcp/internal/config"
-	"teamcity-mcp/internal/health"
-	"teamcity-mcp/internal/mcp"
-	"teamcity-mcp/internal/metrics"
-	"teamcity-mcp/internal/teamcity"
+	"github.com/itcaat/teamcity-mcp/internal/cache"
+	"github.com/itcaat/teamcity-mcp/internal/config"
+	"github.com/itcaat/teamcity-mcp/internal/health"
+	"github.com/itcaat/teamcity-mcp/internal/mcp"
+	"github.com/itcaat/teamcity-mcp/internal/metrics"
+	"github.com/itcaat/teamcity-mcp/internal/teamcity"
 )
 
 // Server represents the MCP server

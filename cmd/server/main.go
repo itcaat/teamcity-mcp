@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"teamcity-mcp/internal/config"
-	"teamcity-mcp/internal/logging"
-	"teamcity-mcp/internal/metrics"
-	"teamcity-mcp/internal/server"
+	"github.com/itcaat/teamcity-mcp/internal/config"
+	"github.com/itcaat/teamcity-mcp/internal/logging"
+	"github.com/itcaat/teamcity-mcp/internal/metrics"
+	"github.com/itcaat/teamcity-mcp/internal/server"
 )
 
 var (

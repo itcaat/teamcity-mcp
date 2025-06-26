@@ -1,7 +1,7 @@
 package logging
 
 import (
-	"teamcity-mcp/internal/config"
+	"github.com/itcaat/teamcity-mcp/internal/config"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

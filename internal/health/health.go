@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"teamcity-mcp/internal/teamcity"
+	"github.com/itcaat/teamcity-mcp/internal/teamcity"
 )
 
 // Checker provides health check functionality
