@@ -313,6 +313,54 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 						"minimum":     1,
 						"maximum":     1000,
 					},
+					"project": map[string]interface{}{
+						"type":        "string",
+						"description": "Project ID or name to filter by",
+					},
+					"number": map[string]interface{}{
+						"type":        "string",
+						"description": "Build number to filter by",
+					},
+					"hanging": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by hanging builds",
+					},
+					"canceled": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by canceled builds",
+					},
+					"queuedDate": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds queued on this date (YYYYMMDDTHHMMSS+HHMM)",
+					},
+					"startDate": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds started on this date (YYYYMMDDTHHMMSS+HHMM)",
+					},
+					"finishDate": map[string]interface{}{
+						"type":        "string",
+						"description": "Search builds finished on this date (YYYYMMDDTHHMMSS+HHMM)",
+					},
+					"failedToStart": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by builds that failed to start",
+					},
+					"composite": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by composite builds",
+					},
+					"tag": map[string]interface{}{
+						"type":        "string",
+						"description": "Single tag to filter by",
+					},
+					"property": map[string]interface{}{
+						"type":        "object",
+						"description": "Build properties to filter by (key-value pairs)",
+					},
+					"compatibleAgent": map[string]interface{}{
+						"type":        "string",
+						"description": "Agent name that is compatible with the builds",
+					},
 				},
 			},
 		},

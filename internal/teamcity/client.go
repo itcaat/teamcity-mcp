@@ -527,19 +527,31 @@ func (c *Client) DownloadArtifact(ctx context.Context, args json.RawMessage) (st
 // SearchBuilds searches for builds with various filters
 func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string, error) {
 	var req struct {
-		BuildTypeID string   `json:"buildTypeId"`
-		Status      string   `json:"status"`
-		State       string   `json:"state"`
-		Branch      string   `json:"branch"`
-		Agent       string   `json:"agent"`
-		User        string   `json:"user"`
-		SinceBuild  string   `json:"sinceBuild"`
-		SinceDate   string   `json:"sinceDate"`
-		UntilDate   string   `json:"untilDate"`
-		Tags        []string `json:"tags"`
-		Personal    *bool    `json:"personal"`
-		Pinned      *bool    `json:"pinned"`
-		Count       int      `json:"count"`
+		BuildTypeID     string            `json:"buildTypeId"`
+		Status          string            `json:"status"`
+		State           string            `json:"state"`
+		Branch          string            `json:"branch"`
+		Agent           string            `json:"agent"`
+		User            string            `json:"user"`
+		SinceBuild      string            `json:"sinceBuild"`
+		SinceDate       string            `json:"sinceDate"`
+		UntilDate       string            `json:"untilDate"`
+		Tags            []string          `json:"tags"`
+		Personal        *bool             `json:"personal"`
+		Pinned          *bool             `json:"pinned"`
+		Count           int               `json:"count"`
+		Project         string            `json:"project"`
+		Number          string            `json:"number"`
+		Hanging         *bool             `json:"hanging"`
+		Canceled        *bool             `json:"canceled"`
+		QueuedDate      string            `json:"queuedDate"`
+		StartDate       string            `json:"startDate"`
+		FinishDate      string            `json:"finishDate"`
+		FailedToStart   *bool             `json:"failedToStart"`
+		Composite       *bool             `json:"composite"`
+		Tag             string            `json:"tag"`
+		Property        map[string]string `json:"property"`
+		CompatibleAgent string            `json:"compatibleAgent"`
 	}
 
 	if err := json.Unmarshal(args, &req); err != nil {
@@ -587,9 +599,46 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 	if req.Pinned != nil {
 		params = append(params, fmt.Sprintf("pinned:%t", *req.Pinned))
 	}
+	if req.Project != "" {
+		params = append(params, fmt.Sprintf("project:%s", req.Project))
+	}
+	if req.Number != "" {
+		params = append(params, fmt.Sprintf("number:%s", req.Number))
+	}
+	if req.Hanging != nil {
+		params = append(params, fmt.Sprintf("hanging:%t", *req.Hanging))
+	}
+	if req.Canceled != nil {
+		params = append(params, fmt.Sprintf("canceled:%t", *req.Canceled))
+	}
+	if req.QueuedDate != "" {
+		params = append(params, fmt.Sprintf("queuedDate:%s", req.QueuedDate))
+	}
+	if req.StartDate != "" {
+		params = append(params, fmt.Sprintf("startDate:%s", req.StartDate))
+	}
+	if req.FinishDate != "" {
+		params = append(params, fmt.Sprintf("finishDate:%s", req.FinishDate))
+	}
+	if req.FailedToStart != nil {
+		params = append(params, fmt.Sprintf("failedToStart:%t", *req.FailedToStart))
+	}
+	if req.Composite != nil {
+		params = append(params, fmt.Sprintf("composite:%t", *req.Composite))
+	}
+	if req.Tag != "" {
+		params = append(params, fmt.Sprintf("tag:%s", req.Tag))
+	}
+	if req.CompatibleAgent != "" {
+		params = append(params, fmt.Sprintf("compatibleAgent:%s", req.CompatibleAgent))
+	}
 
 	for _, tag := range req.Tags {
 		params = append(params, fmt.Sprintf("tag:%s", tag))
+	}
+
+	for key, value := range req.Property {
+		params = append(params, fmt.Sprintf("property:%s:%s", key, value))
 	}
 
 	// Set default count if not specified
