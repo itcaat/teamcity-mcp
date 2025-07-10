@@ -60,3 +60,4 @@ testdata/output/
 
 # Cache directories
 .cache/ 
+cmd/server/__debug_bin91136426

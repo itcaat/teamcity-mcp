@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -643,6 +644,139 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 
 	if response.Count == 0 {
 		result = "No builds found matching the specified criteria."
+	}
+
+	return result, nil
+}
+
+// GetProjects gets projects with optional filters
+func (c *Client) GetProjects(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		ID              string `json:"id"`
+		Project         string `json:"project"`
+		Name            string `json:"name"`
+		Archived        *bool  `json:"archived"`
+		Virtual         *bool  `json:"virtual"`
+		Build           string `json:"build"`
+		BuildType       string `json:"buildType"`
+		DefaultTemplate string `json:"defaultTemplate"`
+		VcsRoot         string `json:"vcsRoot"`
+		ProjectFeature  string `json:"projectFeature"`
+		Pool            string `json:"pool"`
+		Start           *int   `json:"start"`
+		Count           *int   `json:"count"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("get_projects", "success", time.Since(start).Seconds())
+	}()
+
+	// Build endpoint
+	endpoint := "/projects"
+	if req.ID != "" {
+		endpoint = fmt.Sprintf("/projects/id:%s", req.ID)
+	}
+
+	// Build locator for filtering
+	var locatorParts []string
+
+	if req.Project != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("project:%s", req.Project))
+	}
+	if req.Name != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("name:%s", req.Name))
+	}
+	if req.Archived != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("archived:%t", *req.Archived))
+	}
+	if req.Virtual != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("virtual:%t", *req.Virtual))
+	}
+	if req.Build != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("build:%s", req.Build))
+	}
+	if req.BuildType != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("buildType:%s", req.BuildType))
+	}
+	if req.DefaultTemplate != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("defaultTemplate:%s", req.DefaultTemplate))
+	}
+	if req.VcsRoot != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("vcsRoot:%s", req.VcsRoot))
+	}
+	if req.ProjectFeature != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("projectFeature:%s", req.ProjectFeature))
+	}
+	if req.Pool != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("pool:%s", req.Pool))
+	}
+	if req.Start != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("start:%d", *req.Start))
+	}
+	if req.Count != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("count:%d", *req.Count))
+	}
+
+	// Add locator parameter if we have filters and not getting a specific project by ID
+	if len(locatorParts) > 0 && req.ID == "" {
+		locator := strings.Join(locatorParts, ",")
+		endpoint += fmt.Sprintf("?locator=%s", locator)
+	}
+
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get projects: %w", err)
+	}
+
+	// If getting a specific project
+	if req.ID != "" {
+		var project Project
+		if err := json.Unmarshal(respBody, &project); err != nil {
+			return "", fmt.Errorf("failed to parse project response: %w", err)
+		}
+
+		result := fmt.Sprintf("Project: %s\n", project.Name)
+		result += fmt.Sprintf("ID: %s\n", project.ID)
+		if project.Description != "" {
+			result += fmt.Sprintf("Description: %s\n", project.Description)
+		}
+		if project.WebURL != "" {
+			result += fmt.Sprintf("Web URL: %s\n", project.WebURL)
+		}
+
+		return result, nil
+	}
+
+	// Getting all projects
+	var response struct {
+		Count   int       `json:"count"`
+		Project []Project `json:"project"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return "", fmt.Errorf("failed to parse projects response: %w", err)
+	}
+
+	// Format response
+	result := fmt.Sprintf("Found %d projects:\n\n", response.Count)
+	for _, project := range response.Project {
+		result += fmt.Sprintf("Project: %s\n", project.Name)
+		result += fmt.Sprintf("  ID: %s\n", project.ID)
+		if project.Description != "" {
+			result += fmt.Sprintf("  Description: %s\n", project.Description)
+		}
+		if project.WebURL != "" {
+			result += fmt.Sprintf("  Web URL: %s\n", project.WebURL)
+		}
+		result += "\n"
+	}
+
+	if response.Count == 0 {
+		result = "No projects found."
 	}
 
 	return result, nil
