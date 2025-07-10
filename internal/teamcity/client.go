@@ -830,3 +830,131 @@ func (c *Client) GetProjects(ctx context.Context, args json.RawMessage) (string,
 
 	return result, nil
 }
+
+// GetBuildTypes gets build types with optional filters
+func (c *Client) GetBuildTypes(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		ID              string `json:"id"`
+		Project         string `json:"project"`
+		AffectedProject string `json:"affectedProject"`
+		Name            string `json:"name"`
+		TemplateFlag    *bool  `json:"templateFlag"`
+		Template        string `json:"template"`
+		Paused          *bool  `json:"paused"`
+		VcsRoot         string `json:"vcsRoot"`
+		VcsRootInstance string `json:"vcsRootInstance"`
+		Build           string `json:"build"`
+		Start           *int   `json:"start"`
+		Count           *int   `json:"count"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("get_build_types", "success", time.Since(start).Seconds())
+	}()
+
+	// Build endpoint
+	endpoint := "/buildTypes"
+	if req.ID != "" {
+		endpoint = fmt.Sprintf("/buildTypes/id:%s", req.ID)
+	}
+
+	// Build locator for filtering
+	var locatorParts []string
+
+	if req.Project != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("project:%s", req.Project))
+	}
+	if req.AffectedProject != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("affectedProject:%s", req.AffectedProject))
+	}
+	if req.Name != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("name:%s", req.Name))
+	}
+	if req.TemplateFlag != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("templateFlag:%t", *req.TemplateFlag))
+	}
+	if req.Template != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("template:%s", req.Template))
+	}
+	if req.Paused != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("paused:%t", *req.Paused))
+	}
+	if req.VcsRoot != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("vcsRoot:%s", req.VcsRoot))
+	}
+	if req.VcsRootInstance != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("vcsRootInstance:%s", req.VcsRootInstance))
+	}
+	if req.Build != "" {
+		locatorParts = append(locatorParts, fmt.Sprintf("build:%s", req.Build))
+	}
+	if req.Start != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("start:%d", *req.Start))
+	}
+	if req.Count != nil {
+		locatorParts = append(locatorParts, fmt.Sprintf("count:%d", *req.Count))
+	}
+
+	// Add locator parameter if we have filters and not getting a specific build type by ID
+	if len(locatorParts) > 0 && req.ID == "" {
+		locator := strings.Join(locatorParts, ",")
+		endpoint += fmt.Sprintf("?locator=%s", locator)
+	}
+
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get build types: %w", err)
+	}
+
+	// If getting a specific build type
+	if req.ID != "" {
+		var buildType BuildType
+		if err := json.Unmarshal(respBody, &buildType); err != nil {
+			return "", fmt.Errorf("failed to parse build type response: %w", err)
+		}
+
+		result := fmt.Sprintf("Build Type: %s\n", buildType.Name)
+		result += fmt.Sprintf("ID: %s\n", buildType.ID)
+		if buildType.Description != "" {
+			result += fmt.Sprintf("Description: %s\n", buildType.Description)
+		}
+		result += fmt.Sprintf("Project ID: %s\n", buildType.ProjectID)
+		if buildType.Project.Name != "" {
+			result += fmt.Sprintf("Project Name: %s\n", buildType.Project.Name)
+		}
+
+		return result, nil
+	}
+
+	// Getting all build types
+	var response struct {
+		Count     int         `json:"count"`
+		BuildType []BuildType `json:"buildType"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return "", fmt.Errorf("failed to parse build types response: %w", err)
+	}
+
+	// Format response
+	result := fmt.Sprintf("Found %d build types:\n\n", response.Count)
+	for _, buildType := range response.BuildType {
+		result += fmt.Sprintf("Build Type: %s\n", buildType.Name)
+		result += fmt.Sprintf("  ID: %s\n", buildType.ID)
+		if buildType.Description != "" {
+			result += fmt.Sprintf("  Description: %s\n", buildType.Description)
+		}
+		result += fmt.Sprintf("  Project: %s (%s)\n", buildType.Project.Name, buildType.ProjectID)
+		result += "\n"
+	}
+
+	if response.Count == 0 {
+		result = "No build types found."
+	}
+
+	return result, nil
+}

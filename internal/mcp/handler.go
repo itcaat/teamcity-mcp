@@ -428,6 +428,66 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "get_build_types",
+			"description": "Get build types or filter by specific criteria",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"id": map[string]interface{}{
+						"type":        "string",
+						"description": "Build type ID to get specific build type",
+					},
+					"project": map[string]interface{}{
+						"type":        "string",
+						"description": "Project ID or name to filter by",
+					},
+					"affectedProject": map[string]interface{}{
+						"type":        "string",
+						"description": "Affected project ID to filter by",
+					},
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Build type name to filter by",
+					},
+					"templateFlag": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by template flag",
+					},
+					"template": map[string]interface{}{
+						"type":        "string",
+						"description": "Template ID to filter by",
+					},
+					"paused": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by paused status",
+					},
+					"vcsRoot": map[string]interface{}{
+						"type":        "string",
+						"description": "VCS root ID to filter by",
+					},
+					"vcsRootInstance": map[string]interface{}{
+						"type":        "string",
+						"description": "VCS root instance ID to filter by",
+					},
+					"build": map[string]interface{}{
+						"type":        "string",
+						"description": "Build ID to filter by",
+					},
+					"start": map[string]interface{}{
+						"type":        "integer",
+						"description": "Start index for pagination",
+						"minimum":     0,
+					},
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "Number of build types to return",
+						"minimum":     1,
+						"maximum":     1000,
+					},
+				},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -531,6 +591,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.SearchBuilds(ctx, args)
 	case "get_projects":
 		return h.tc.GetProjects(ctx, args)
+	case "get_build_types":
+		return h.tc.GetBuildTypes(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
