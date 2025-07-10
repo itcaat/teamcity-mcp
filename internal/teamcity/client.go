@@ -86,7 +86,17 @@ func NewClient(cfg config.TeamCityConfig, logger *zap.SugaredLogger) (*Client, e
 
 // makeRequest makes an authenticated HTTP request to TeamCity
 func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body []byte) ([]byte, error) {
-	url := c.baseURL + "/app/rest" + endpoint
+	return c.makeRequestWithPath(ctx, method, endpoint, body, true)
+}
+
+// makeRequestWithPath makes an authenticated HTTP request to TeamCity with optional REST API path
+func (c *Client) makeRequestWithPath(ctx context.Context, method, endpoint string, body []byte, useRestPath bool) ([]byte, error) {
+	var url string
+	if useRestPath {
+		url = c.baseURL + "/app/rest" + endpoint
+	} else {
+		url = c.baseURL + endpoint
+	}
 
 	var reqBody io.Reader
 	if body != nil {
@@ -829,6 +839,34 @@ func (c *Client) GetProjects(ctx context.Context, args json.RawMessage) (string,
 	}
 
 	return result, nil
+}
+
+// GetBuildLog gets the build log for a specific build
+func (c *Client) GetBuildLog(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		BuildID int `json:"buildId"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("get_build_log", "success", time.Since(start).Seconds())
+	}()
+
+	// Build the endpoint URL for downloading build log
+	endpoint := fmt.Sprintf("/downloadBuildLog.html?buildId=%d", req.BuildID)
+
+	// Use the non-REST API path for build log download
+	respBody, err := c.makeRequestWithPath(ctx, "GET", endpoint, nil, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to get build log: %w", err)
+	}
+
+	// Return the build log content as a string
+	return string(respBody), nil
 }
 
 // GetBuildTypes gets build types with optional filters

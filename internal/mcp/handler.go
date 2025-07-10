@@ -488,6 +488,20 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "get_build_log",
+			"description": "Get the build log for a specific build",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"buildId": map[string]interface{}{
+						"type":        "integer",
+						"description": "Build ID to get log for",
+					},
+				},
+				"required": []string{"buildId"},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -593,6 +607,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.GetProjects(ctx, args)
 	case "get_build_types":
 		return h.tc.GetBuildTypes(ctx, args)
+	case "get_build_log":
+		return h.tc.GetBuildLog(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
