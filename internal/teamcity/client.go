@@ -537,31 +537,33 @@ func (c *Client) DownloadArtifact(ctx context.Context, args json.RawMessage) (st
 // SearchBuilds searches for builds with various filters
 func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string, error) {
 	var req struct {
-		BuildTypeID     string            `json:"buildTypeId"`
-		Status          string            `json:"status"`
-		State           string            `json:"state"`
-		Branch          string            `json:"branch"`
-		Agent           string            `json:"agent"`
-		User            string            `json:"user"`
-		SinceBuild      string            `json:"sinceBuild"`
-		SinceDate       string            `json:"sinceDate"`
-		UntilDate       string            `json:"untilDate"`
-		Tags            []string          `json:"tags"`
-		Personal        *bool             `json:"personal"`
-		Pinned          *bool             `json:"pinned"`
-		Count           int               `json:"count"`
-		Project         string            `json:"project"`
-		Number          string            `json:"number"`
-		Hanging         *bool             `json:"hanging"`
-		Canceled        *bool             `json:"canceled"`
-		QueuedDate      string            `json:"queuedDate"`
-		StartDate       string            `json:"startDate"`
-		FinishDate      string            `json:"finishDate"`
-		FailedToStart   *bool             `json:"failedToStart"`
-		Composite       *bool             `json:"composite"`
-		Tag             string            `json:"tag"`
-		Property        map[string]string `json:"property"`
-		CompatibleAgent string            `json:"compatibleAgent"`
+		BuildTypeID        string            `json:"buildTypeId"`
+		Status             string            `json:"status"`
+		State              string            `json:"state"`
+		Branch             string            `json:"branch"`
+		Agent              string            `json:"agent"`
+		User               string            `json:"user"`
+		SinceBuild         string            `json:"sinceBuild"`
+		SinceDate          string            `json:"sinceDate"`
+		UntilDate          string            `json:"untilDate"`
+		Tags               []string          `json:"tags"`
+		Personal           *bool             `json:"personal"`
+		Pinned             *bool             `json:"pinned"`
+		Count              int               `json:"count"`
+		Project            string            `json:"project"`
+		Number             string            `json:"number"`
+		Hanging            *bool             `json:"hanging"`
+		Canceled           *bool             `json:"canceled"`
+		QueuedDate         string            `json:"queuedDate"`
+		StartDate          string            `json:"startDate"`
+		FinishDate         string            `json:"finishDate"`
+		FailedToStart      *bool             `json:"failedToStart"`
+		Composite          *bool             `json:"composite"`
+		Tag                string            `json:"tag"`
+		Property           map[string]string `json:"property"`
+		CompatibleAgent    string            `json:"compatibleAgent"`
+		SnapshotDependency string            `json:"snapshotDependency"`
+		ArtifactDependency string            `json:"artifactDependency"`
 	}
 
 	if err := json.Unmarshal(args, &req); err != nil {
@@ -641,6 +643,12 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 	}
 	if req.CompatibleAgent != "" {
 		params = append(params, fmt.Sprintf("compatibleAgent:%s", req.CompatibleAgent))
+	}
+	if req.SnapshotDependency != "" {
+		params = append(params, fmt.Sprintf("snapshotDependency:%s", req.SnapshotDependency))
+	}
+	if req.ArtifactDependency != "" {
+		params = append(params, fmt.Sprintf("artifactDependency:%s", req.ArtifactDependency))
 	}
 
 	for _, tag := range req.Tags {

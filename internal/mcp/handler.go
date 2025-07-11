@@ -361,6 +361,14 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 						"type":        "string",
 						"description": "Agent name that is compatible with the builds",
 					},
+					"snapshotDependency": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by snapshot dependency (build type ID or locator)",
+					},
+					"artifactDependency": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by artifact dependency (build type ID or locator)",
+					},
 				},
 			},
 		},
