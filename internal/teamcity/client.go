@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +64,29 @@ type Agent struct {
 	Connected bool   `json:"connected"`
 	Enabled   bool   `json:"enabled"`
 	WebURL    string `json:"webUrl"`
+}
+
+// LogEntry represents a single log entry from the build log
+type LogEntry struct {
+	Time  string   `json:"time"`
+	Level string   `json:"level"`
+	Msg   []string `json:"msg"`
+	Step  int      `json:"step"`
+}
+
+// StepGroup represents a group of log entries for a specific build step
+type StepGroup struct {
+	StepName  string   `json:"stepName"`
+	Step      int      `json:"step"`
+	StartTime string   `json:"start_time"`
+	EndTime   string   `json:"end_time"`
+	Logs      []string `json:"logs"`
+}
+
+// ParsedBuildLog represents the parsed structure of a build log
+type ParsedBuildLog struct {
+	Header []string    `json:"header"`
+	Steps  []StepGroup `json:"steps"`
 }
 
 // NewClient creates a new TeamCity client
@@ -849,10 +873,106 @@ func (c *Client) GetProjects(ctx context.Context, args json.RawMessage) (string,
 	return result, nil
 }
 
+// parseBuildLog parses the raw build log response into a structured format
+func parseBuildLog(responseBody string) ParsedBuildLog {
+	// Split header and body
+	parts := strings.Split(responseBody, "\r\n\r\n")
+	header := ""
+	body := ""
+	if len(parts) >= 2 {
+		header = parts[0]
+		body = parts[1]
+	} else {
+		body = responseBody
+	}
+
+	// Split body into log lines
+	logLines := strings.Split(body, "\r\n")
+	var logObjs []LogEntry
+	step := 0
+
+	stepPattern := regexp.MustCompile(`^ Step \d+\/\d+`)
+
+	for _, line := range logLines {
+		if strings.HasPrefix(line, "[") {
+			if len(line) < 12 {
+				continue
+			}
+
+			msg := line[12:]
+
+			if stepPattern.MatchString(msg) {
+				step++
+			}
+
+			if strings.Contains(msg, "Content of /opt/buildagent/temp/agentTmp/custom_script") {
+				continue
+			}
+
+			// Remove step info from message
+			stepRemovePattern := regexp.MustCompile(` \[Step \d+\/\d+\] `)
+			msg = stepRemovePattern.ReplaceAllString(msg, "")
+
+			// Clean up tabs and split on newlines
+			msg = strings.ReplaceAll(msg, "\t", "")
+			msgLines := strings.Split(msg, "\n")
+
+			logObj := LogEntry{
+				Time:  line[1:9],
+				Level: line[10:11],
+				Msg:   msgLines,
+				Step:  step,
+			}
+			logObjs = append(logObjs, logObj)
+		} else {
+			// This must be a message from the previous line
+			if len(logObjs) > 0 {
+				logObjs[len(logObjs)-1].Msg = append(logObjs[len(logObjs)-1].Msg, line)
+			}
+		}
+	}
+
+	// Group by steps
+	var steps []StepGroup
+	stepMap := make(map[int]int) // step number -> index in steps slice
+
+	for _, logObj := range logObjs {
+		if logObj.Step > 0 {
+			if index, exists := stepMap[logObj.Step]; exists {
+				// Step already exists, append logs and update end time
+				steps[index].Logs = append(steps[index].Logs, logObj.Msg...)
+				steps[index].EndTime = logObj.Time
+			} else {
+				// New step
+				stepName := ""
+				if len(logObj.Msg) > 0 {
+					stepName = logObj.Msg[0]
+				}
+				newGroup := StepGroup{
+					StepName:  stepName,
+					Step:      logObj.Step,
+					StartTime: logObj.Time,
+					EndTime:   logObj.Time,
+					Logs:      logObj.Msg,
+				}
+				steps = append(steps, newGroup)
+				stepMap[logObj.Step] = len(steps) - 1
+			}
+		}
+	}
+
+	return ParsedBuildLog{
+		Header: strings.Split(header, "\r\n"),
+		Steps:  steps,
+	}
+}
+
 // GetBuildLog gets the build log for a specific build
 func (c *Client) GetBuildLog(ctx context.Context, args json.RawMessage) (string, error) {
 	var req struct {
 		BuildID int `json:"buildId"`
+		Start   int `json:"start,omitempty"`
+		Limit   int `json:"limit,omitempty"`
 	}
 
 	if err := json.Unmarshal(args, &req); err != nil {
@@ -873,8 +993,40 @@ func (c *Client) GetBuildLog(ctx context.Context, args json.RawMessage) (string,
 		return "", fmt.Errorf("failed to get build log: %w", err)
 	}
 
-	// Return the build log content as a string
-	return string(respBody), nil
+	// Parse the build log into structured format
+	parsedLog := parseBuildLog(string(respBody))
+
+	// Filter steps based on start and limit parameters
+	if len(parsedLog.Steps) > 0 {
+		// Set defaults: start=1 if not provided, limit=all if not provided
+		startStep := req.Start
+		if startStep == 0 {
+			startStep = 1
+		}
+
+		limitSteps := req.Limit
+		if limitSteps == 0 {
+			limitSteps = len(parsedLog.Steps)
+		}
+
+		// Filter steps to include only those in the specified range
+		var filteredSteps []StepGroup
+		for _, step := range parsedLog.Steps {
+			if step.Step >= startStep && step.Step < startStep+limitSteps {
+				filteredSteps = append(filteredSteps, step)
+			}
+		}
+
+		parsedLog.Steps = filteredSteps
+	}
+
+	// Convert to JSON string for return
+	jsonData, err := json.MarshalIndent(parsedLog, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal parsed log: %w", err)
+	}
+
+	return string(jsonData), nil
 }
 
 // GetBuildTypes gets build types with optional filters

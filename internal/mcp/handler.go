@@ -506,6 +506,16 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 						"type":        "integer",
 						"description": "Build ID to get log for",
 					},
+					"start": map[string]interface{}{
+						"type":        "integer",
+						"description": "Starting step number (defaults to 1)",
+						"minimum":     1,
+					},
+					"limit": map[string]interface{}{
+						"type":        "integer",
+						"description": "Number of steps to return (defaults to all)",
+						"minimum":     1,
+					},
 				},
 				"required": []string{"buildId"},
 			},
