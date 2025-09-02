@@ -412,7 +412,7 @@ curl -X POST http://localhost:8123/mcp \
 
 ## Available Tools
 
-The TeamCity MCP server provides 6 powerful tools for managing builds:
+The TeamCity MCP server provides 7 powerful tools for managing builds:
 
 ### 1. trigger_build
 Trigger a new build in TeamCity.
@@ -630,6 +630,73 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
+### 7. fetch_build_log
+Fetch the complete build log for a specific build.
+
+**Parameters:**
+- `buildId` (required): Build ID to fetch log for
+- `plain` (optional): Return log as plain text (default: true)
+- `archived` (optional): Return log as zip archive (default: false)  
+- `dateFormat` (optional): Custom timestamp format (Java SimpleDateFormat)
+
+**Examples:**
+
+Fetch plain text build log:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345"
+      }
+    }
+  }'
+```
+
+Fetch archived build log:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 13,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345",
+        "archived": true
+      }
+    }
+  }'
+```
+
+Fetch log with custom timestamp format:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345",
+        "dateFormat": "yyyy-MM-dd HH:mm:ss"
+      }
+    }
+  }'
+```
+
 ### Local Binary Configuration
 
 If you prefer to use the local binary instead of Docker:
@@ -657,6 +724,8 @@ Once configured, you can use natural language commands like:
 - **"Pin the latest successful build"**
 - **"Cancel the running build 12345"**
 - **"Add a release tag to build 12345"**
+- **"Fetch the build log for build 12345"**
+- **"Get the archived log for the latest build"**
 
 The AI will automatically use the appropriate TeamCity tools to fulfill your requests.
 
