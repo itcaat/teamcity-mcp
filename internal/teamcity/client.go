@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -645,5 +646,155 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 		result = "No builds found matching the specified criteria."
 	}
 
+	return result, nil
+}
+
+// FetchBuildLog fetches the build log for a specific build
+func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		BuildID    string `json:"buildId"`
+		Plain      *bool  `json:"plain,omitempty"`
+		Archived   *bool  `json:"archived,omitempty"`
+		DateFormat string `json:"dateFormat,omitempty"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	if req.BuildID == "" {
+		return "", fmt.Errorf("buildId is required")
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("fetch_build_log", "success", time.Since(start).Seconds())
+	}()
+
+	// Build the log download URL with parameters
+	endpoint := fmt.Sprintf("/downloadBuildLog.html?buildId=%s", req.BuildID)
+
+	// Add query parameters based on the request
+	params := make([]string, 0)
+
+	// Default to plain=true unless explicitly set to false
+	plain := true
+	if req.Plain != nil {
+		plain = *req.Plain
+	}
+	if plain {
+		params = append(params, "plain=true")
+	}
+
+	if req.Archived != nil && *req.Archived {
+		params = append(params, "archived=true")
+	}
+
+	if req.DateFormat != "" {
+		// URL encode the date format parameter
+		params = append(params, fmt.Sprintf("dateFormat=%s", req.DateFormat))
+	}
+
+	// Add parameters to endpoint
+	if len(params) > 0 {
+		endpoint += "&" + strings.Join(params, "&")
+	}
+
+	// Make the request using the custom endpoint (not REST API)
+	url := c.baseURL + endpoint
+
+	reqObj, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	// Set authentication
+	if c.cfg.Token != "" {
+		reqObj.Header.Set("Authorization", "Bearer "+c.cfg.Token)
+	}
+
+	resp, err := c.httpClient.Do(reqObj)
+	if err != nil {
+		return "", fmt.Errorf("making request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Read the response body
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response: %w", err)
+	}
+
+	// If archived, we get binary data - indicate this in the response
+	if req.Archived != nil && *req.Archived {
+		return fmt.Sprintf("Build log for build %s downloaded as archive (%d bytes). Archive content is binary data.",
+			req.BuildID, len(respBody)), nil
+	}
+
+	// For plain text logs, return the content directly
+	logContent := string(respBody)
+
+	// Add some metadata about the log
+	lineCount := len(strings.Split(logContent, "\n"))
+
+	result := fmt.Sprintf("Build log for build %s (%d lines, %d bytes):\n\n%s",
+		req.BuildID, lineCount, len(respBody), logContent)
+
+	return result, nil
+}
+
+// GetTestFailures returns failing tests for a specific build
+func (c *Client) GetTestFailures(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		BuildID string `json:"buildId"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+	if req.BuildID == "" {
+		return "", fmt.Errorf("buildId is required")
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("get_test_failures", "success", time.Since(start).Seconds())
+	}()
+
+	endpoint := fmt.Sprintf("/testOccurrences?locator=build:(id:%s),status:FAILURE", req.BuildID)
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get test failures: %w", err)
+	}
+
+	var response struct {
+		Count          int `json:"count"`
+		TestOccurrence []struct {
+			Name     string `json:"name"`
+			Status   string `json:"status"`
+			Duration int    `json:"duration"`
+			Message  string `json:"details"`
+		} `json:"testOccurrence"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return "", fmt.Errorf("failed to parse test failures response: %w", err)
+	}
+
+	if response.Count == 0 {
+		return "No failing tests found for this build.", nil
+	}
+
+	result := fmt.Sprintf("%d failing tests:\n", response.Count)
+	for _, test := range response.TestOccurrence {
+		result += fmt.Sprintf("- %s (duration: %d ms)", test.Name, test.Duration)
+		if test.Message != "" {
+			result += fmt.Sprintf(": %s", test.Message)
+		}
+		result += "\n"
+	}
 	return result, nil
 }

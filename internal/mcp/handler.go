@@ -316,6 +316,32 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "fetch_build_log",
+			"description": "Fetch build log for a specific build",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"buildId": map[string]interface{}{
+						"type":        "string",
+						"description": "Build ID to fetch log for",
+					},
+					"plain": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Return log as plain text (default: true)",
+					},
+					"archived": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Return log as zip archive (default: false)",
+					},
+					"dateFormat": map[string]interface{}{
+						"type":        "string",
+						"description": "Custom timestamp format (Java SimpleDateFormat)",
+					},
+				},
+				"required": []string{"buildId"},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -417,6 +443,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.DownloadArtifact(ctx, args)
 	case "search_builds":
 		return h.tc.SearchBuilds(ctx, args)
+	case "fetch_build_log":
+		return h.tc.FetchBuildLog(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

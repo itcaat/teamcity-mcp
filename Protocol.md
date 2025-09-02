@@ -302,6 +302,60 @@ Tools provide write operations and actions on TeamCity entities.
 }
 ```
 
+### fetch_build_log
+
+**Description**: Fetches the complete build log for a specific build.
+
+**TeamCity Endpoint**: `GET /downloadBuildLog.html?buildId={buildId}`
+
+**Input Schema**:
+```json
+{
+  "type": "object", 
+  "properties": {
+    "buildId": {
+      "type": "string",
+      "description": "Build ID to fetch log for (required)"
+    },
+    "plain": {
+      "type": "boolean",
+      "description": "Return log as plain text (optional, default: true)"
+    },
+    "archived": {
+      "type": "boolean", 
+      "description": "Return log as zip archive (optional, default: false)"
+    },
+    "dateFormat": {
+      "type": "string",
+      "description": "Custom timestamp format following Java SimpleDateFormat (optional)"
+    }
+  },
+  "required": ["buildId"]
+}
+```
+
+**Additional Parameters**:
+- `plain=true`: Returns the log content as plain text in the browser/response body
+- `archived=true`: Returns the log file as a `.zip` archive
+- `dateFormat=<pattern>`: Customizes timestamp format (e.g., "yyyy-MM-dd HH:mm:ss")
+
+**Example Usage**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "fetch_build_log",
+    "arguments": {
+      "buildId": "12345",
+      "plain": true,
+      "dateFormat": "yyyy-MM-dd HH:mm:ss"
+    }
+  }
+}
+```
+
 ## Authentication
 
 ### Client to MCP Server
