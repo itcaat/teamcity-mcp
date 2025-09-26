@@ -356,6 +356,93 @@ Tools provide write operations and actions on TeamCity entities.
 }
 ```
 
+### search_build_configurations
+
+**Description**: Searches for build configurations with comprehensive filters including basic filters, parameters, steps, and VCS roots.
+
+**TeamCity Endpoints**: 
+- `GET /app/rest/buildTypes` (basic search)
+- `GET /app/rest/buildTypes/id:{buildTypeId}/parameters` (parameters)
+- `GET /app/rest/buildTypes/id:{buildTypeId}/steps` (build steps)
+- `GET /app/rest/buildTypes/id:{buildTypeId}/vcs-root-entries` (VCS roots)
+
+**Input Schema**:
+```json
+{
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "description": "Filter by project ID (optional)"
+    },
+    "name": {
+      "type": "string", 
+      "description": "Search by configuration name with partial matching (optional)"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Filter by enabled status (optional)"
+    },
+    "paused": {
+      "type": "boolean",
+      "description": "Filter by paused status (optional)"
+    },
+    "template": {
+      "type": "boolean",
+      "description": "Filter templates (true) or regular configurations (false) (optional)"
+    },
+    "parameterName": {
+      "type": "string",
+      "description": "Search by parameter name with partial matching (optional)"
+    },
+    "parameterValue": {
+      "type": "string",
+      "description": "Search by parameter value with partial matching (optional)"
+    },
+    "stepType": {
+      "type": "string",
+      "description": "Search by build step type (e.g., 'gradle', 'docker', 'powershell') (optional)"
+    },
+    "stepName": {
+      "type": "string",
+      "description": "Search by build step name with partial matching (optional)"
+    },
+    "vcsType": {
+      "type": "string",
+      "description": "Search by VCS type (e.g., 'git', 'subversion') (optional)"
+    },
+    "includeDetails": {
+      "type": "boolean",
+      "description": "Include detailed information (parameters, steps, VCS) in results (optional, default: false)"
+    },
+    "count": {
+      "type": "integer",
+      "description": "Maximum number of configurations to return (optional, default: 100)"
+    }
+  }
+}
+```
+
+**Example Usage**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "search_build_configurations",
+    "arguments": {
+      "stepType": "gradle",
+      "parameterName": "env.DEPLOY_TARGET",
+      "parameterValue": "production",
+      "includeDetails": true,
+      "count": 50
+    }
+  }
+}
+```
+
+
 ## Authentication
 
 ### Client to MCP Server
