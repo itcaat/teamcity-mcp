@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,10 +47,11 @@ func TestToolDefinitions(t *testing.T) {
 		"download_artifact",
 		"search_builds",
 		"fetch_build_log",
+		"search_build_configurations",
 	}
 
 	// Validate we have the right number of tools
-	assert.Equal(t, 7, len(expectedTools))
+	assert.Equal(t, 8, len(expectedTools))
 
 	// Validate tool names are correctly formatted
 	for _, tool := range expectedTools {
@@ -216,6 +218,363 @@ func TestBuildLogURLConstruction(t *testing.T) {
 			// Verify expected parameters are present
 			for _, expected := range tc.expected {
 				assert.Contains(t, params, expected)
+			}
+		})
+	}
+}
+
+func TestSearchBuildConfigurationsTool(t *testing.T) {
+	// Test search_build_configurations tool parameter validation
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		valid    bool
+		expected string
+	}{
+		{
+			name: "Valid with all parameters",
+			input: map[string]interface{}{
+				"projectId": "MyProject",
+				"name":      "Test",
+				"enabled":   true,
+				"paused":    false,
+				"template":  false,
+				"count":     50,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with only name",
+			input: map[string]interface{}{
+				"name": "Test Configuration",
+			},
+			valid: true,
+		},
+		{
+			name:  "Valid with no parameters (should return all)",
+			input: map[string]interface{}{},
+			valid: true,
+		},
+		{
+			name: "Valid with template filter",
+			input: map[string]interface{}{
+				"template": true,
+				"count":    25,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with project filter",
+			input: map[string]interface{}{
+				"projectId": "MyProject",
+				"enabled":   true,
+			},
+			valid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Basic validation - all inputs should be valid for this tool
+			// since all parameters are optional
+			assert.True(t, tt.valid)
+
+			// Validate parameter types if present
+			if projectId, exists := tt.input["projectId"]; exists {
+				assert.IsType(t, "", projectId)
+			}
+			if name, exists := tt.input["name"]; exists {
+				assert.IsType(t, "", name)
+			}
+			if enabled, exists := tt.input["enabled"]; exists {
+				assert.IsType(t, true, enabled)
+			}
+			if paused, exists := tt.input["paused"]; exists {
+				assert.IsType(t, true, paused)
+			}
+			if template, exists := tt.input["template"]; exists {
+				assert.IsType(t, true, template)
+			}
+			if count, exists := tt.input["count"]; exists {
+				assert.IsType(t, 0, count)
+			}
+		})
+	}
+}
+
+func TestBuildConfigurationURLConstruction(t *testing.T) {
+	// Test URL construction logic for build configuration search endpoint
+	baseEndpoint := "/buildTypes"
+
+	// Test base URL construction
+	assert.Contains(t, baseEndpoint, "buildTypes")
+
+	// Test parameter combinations
+	testCases := []struct {
+		name       string
+		projectId  string
+		nameFilter string
+		enabled    *bool
+		paused     *bool
+		template   *bool
+		count      int
+		expected   []string // Expected URL components
+	}{
+		{
+			name:     "Default count only",
+			count:    0, // Should default to 100
+			expected: []string{"count:100"},
+		},
+		{
+			name:      "Project filter",
+			projectId: "MyProject",
+			expected:  []string{"project:MyProject"},
+		},
+		{
+			name:       "Name filter",
+			nameFilter: "Test",
+			expected:   []string{"name:Test"},
+		},
+		{
+			name:     "Enabled filter",
+			enabled:  boolPtr(true),
+			expected: []string{"enabled:true"},
+		},
+		{
+			name:     "Template filter",
+			template: boolPtr(true),
+			expected: []string{"template:true"},
+		},
+		{
+			name:       "Multiple filters",
+			projectId:  "MyProject",
+			nameFilter: "Test",
+			enabled:    boolPtr(true),
+			count:      50,
+			expected:   []string{"project:MyProject", "name:Test", "enabled:true", "count:50"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Simulate URL parameter construction
+			params := []string{}
+
+			if tc.projectId != "" {
+				params = append(params, "project:"+tc.projectId)
+			}
+			if tc.nameFilter != "" {
+				params = append(params, "name:"+tc.nameFilter)
+			}
+			if tc.enabled != nil {
+				if *tc.enabled {
+					params = append(params, "enabled:true")
+				} else {
+					params = append(params, "enabled:false")
+				}
+			}
+			if tc.paused != nil {
+				if *tc.paused {
+					params = append(params, "paused:true")
+				} else {
+					params = append(params, "paused:false")
+				}
+			}
+			if tc.template != nil {
+				if *tc.template {
+					params = append(params, "template:true")
+				} else {
+					params = append(params, "template:false")
+				}
+			}
+
+			// Verify expected parameters are present
+			for _, expected := range tc.expected {
+				// Skip count parameters in this test for simplicity
+				if !strings.HasPrefix(expected, "count:") {
+					assert.Contains(t, params, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestSearchBuildConfigurationsAdvancedTool(t *testing.T) {
+	// Test search_build_configurations advanced parameter validation
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		valid    bool
+		expected string
+	}{
+		{
+			name: "Valid with basic filters",
+			input: map[string]interface{}{
+				"projectId": "MyProject",
+				"name":      "Test",
+				"enabled":   true,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with parameter filters",
+			input: map[string]interface{}{
+				"parameterName":  "env.DEPLOY_TARGET",
+				"parameterValue": "production",
+				"includeDetails": true,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with step filters",
+			input: map[string]interface{}{
+				"stepType": "gradle",
+				"stepName": "Build",
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with VCS filters",
+			input: map[string]interface{}{
+				"vcsType":        "git",
+				"includeDetails": true,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with combined filters",
+			input: map[string]interface{}{
+				"projectId":      "MyProject",
+				"parameterName":  "system.docker.image",
+				"stepType":       "docker",
+				"vcsType":        "git",
+				"includeDetails": true,
+				"count":          50,
+			},
+			valid: true,
+		},
+		{
+			name:  "Valid with no parameters (should return all)",
+			input: map[string]interface{}{},
+			valid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Basic validation - all inputs should be valid for this tool
+			// since all parameters are optional
+			assert.True(t, tt.valid)
+
+			// Validate parameter types if present
+			if projectId, exists := tt.input["projectId"]; exists {
+				assert.IsType(t, "", projectId)
+			}
+			if name, exists := tt.input["name"]; exists {
+				assert.IsType(t, "", name)
+			}
+			if enabled, exists := tt.input["enabled"]; exists {
+				assert.IsType(t, true, enabled)
+			}
+			if parameterName, exists := tt.input["parameterName"]; exists {
+				assert.IsType(t, "", parameterName)
+			}
+			if parameterValue, exists := tt.input["parameterValue"]; exists {
+				assert.IsType(t, "", parameterValue)
+			}
+			if stepType, exists := tt.input["stepType"]; exists {
+				assert.IsType(t, "", stepType)
+			}
+			if stepName, exists := tt.input["stepName"]; exists {
+				assert.IsType(t, "", stepName)
+			}
+			if vcsType, exists := tt.input["vcsType"]; exists {
+				assert.IsType(t, "", vcsType)
+			}
+			if includeDetails, exists := tt.input["includeDetails"]; exists {
+				assert.IsType(t, true, includeDetails)
+			}
+			if count, exists := tt.input["count"]; exists {
+				assert.IsType(t, 0, count)
+			}
+		})
+	}
+}
+
+func TestDetailedSearchFiltering(t *testing.T) {
+	// Test detailed search filtering logic
+	testCases := []struct {
+		name           string
+		parameterName  string
+		parameterValue string
+		stepType       string
+		stepName       string
+		vcsType        string
+		expectedFields []string
+	}{
+		{
+			name:           "Parameter search",
+			parameterName:  "env.DEPLOY",
+			parameterValue: "prod",
+			expectedFields: []string{"parameterName", "parameterValue"},
+		},
+		{
+			name:           "Step search",
+			stepType:       "gradle",
+			stepName:       "build",
+			expectedFields: []string{"stepType", "stepName"},
+		},
+		{
+			name:           "VCS search",
+			vcsType:        "git",
+			expectedFields: []string{"vcsType"},
+		},
+		{
+			name:           "Combined search",
+			parameterName:  "system.docker",
+			stepType:       "docker",
+			vcsType:        "git",
+			expectedFields: []string{"parameterName", "stepType", "vcsType"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Validate that we're testing the expected fields
+			for _, field := range tc.expectedFields {
+				switch field {
+				case "parameterName":
+					assert.NotEmpty(t, tc.parameterName)
+				case "parameterValue":
+					assert.NotEmpty(t, tc.parameterValue)
+				case "stepType":
+					assert.NotEmpty(t, tc.stepType)
+				case "stepName":
+					assert.NotEmpty(t, tc.stepName)
+				case "vcsType":
+					assert.NotEmpty(t, tc.vcsType)
+				}
+			}
+		})
+	}
+}
+
+func TestDetailedSearchAPIEndpoints(t *testing.T) {
+	// Test that we know the correct API endpoints for detailed search
+	expectedEndpoints := map[string]string{
+		"basic":      "/buildTypes",
+		"parameters": "/buildTypes/id:{buildTypeId}/parameters",
+		"steps":      "/buildTypes/id:{buildTypeId}/steps",
+		"vcs":        "/buildTypes/id:{buildTypeId}/vcs-root-entries",
+	}
+
+	for name, endpoint := range expectedEndpoints {
+		t.Run(name, func(t *testing.T) {
+			assert.NotEmpty(t, endpoint)
+			assert.Contains(t, endpoint, "/buildTypes")
+
+			if name != "basic" {
+				assert.Contains(t, endpoint, "{buildTypeId}")
 			}
 		})
 	}

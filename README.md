@@ -412,7 +412,7 @@ curl -X POST http://localhost:8123/mcp \
 
 ## Available Tools
 
-The TeamCity MCP server provides 7 powerful tools for managing builds:
+The TeamCity MCP server provides 8 powerful tools for managing builds:
 
 ### 1. trigger_build
 Trigger a new build in TeamCity.
@@ -697,6 +697,108 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
+### 8. search_build_configurations
+Search for build configurations with comprehensive filtering options including basic filters, parameters, steps, and VCS roots.
+
+**Parameters (all optional):**
+
+**Basic filters:**
+- `projectId`: Filter by project ID
+- `name`: Search by configuration name (partial matching)
+- `enabled`: Filter by enabled status (boolean)
+- `paused`: Filter by paused status (boolean)
+- `template`: Filter templates (true) or regular configurations (false) (boolean)
+- `count`: Maximum number of configurations to return (1-1000, default: 100)
+
+**Advanced filters:**
+- `parameterName`: Search by parameter name (partial matching)
+- `parameterValue`: Search by parameter value (partial matching)  
+- `stepType`: Search by build step type (e.g., 'gradle', 'docker', 'powershell')
+- `stepName`: Search by build step name (partial matching)
+- `vcsType`: Search by VCS type (e.g., 'git', 'subversion')
+- `includeDetails`: Include detailed information (parameters, steps, VCS) in results (boolean, default: false)
+
+**Examples:**
+
+Basic search by name:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "tools/call",
+    "params": {
+      "name": "search_build_configurations",
+      "arguments": {
+        "name": "Test",
+        "enabled": true
+      }
+    }
+  }'
+```
+
+Search with parameter filter:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 16,
+    "method": "tools/call",
+    "params": {
+      "name": "search_build_configurations",
+      "arguments": {
+        "parameterName": "env.DEPLOY_TARGET",
+        "parameterValue": "production",
+        "includeDetails": true
+      }
+    }
+  }'
+```
+
+Search for Gradle configurations:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 17,
+    "method": "tools/call",
+    "params": {
+      "name": "search_build_configurations",
+      "arguments": {
+        "stepType": "gradle",
+        "projectId": "MyProject",
+        "includeDetails": true
+      }
+    }
+  }'
+```
+
+Search for Git-based configurations:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 18,
+    "method": "tools/call",
+    "params": {
+      "name": "search_build_configurations",
+      "arguments": {
+        "vcsType": "git",
+        "stepName": "Deploy"
+      }
+    }
+  }'
+```
+
+
 ### Local Binary Configuration
 
 If you prefer to use the local binary instead of Docker:
@@ -726,6 +828,14 @@ Once configured, you can use natural language commands like:
 - **"Add a release tag to build 12345"**
 - **"Fetch the build log for build 12345"**
 - **"Get the archived log for the latest build"**
+- **"Find all build configurations with 'Test' in the name"**
+- **"Search for enabled configurations in MyProject"**
+- **"Show me all build configuration templates"**
+- **"Find configurations that use Gradle build steps"**
+- **"Search for configurations with DEPLOY_TARGET parameter set to production"**
+- **"Show me all configurations using Git VCS"**
+- **"Find Docker-based build configurations"**
+- **"Search for configurations with specific parameter names"**
 
 The AI will automatically use the appropriate TeamCity tools to fulfill your requests.
 

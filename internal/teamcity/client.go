@@ -65,6 +65,41 @@ type Agent struct {
 	WebURL    string `json:"webUrl"`
 }
 
+// Parameter represents a TeamCity build configuration parameter
+type Parameter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Type  string `json:"type,omitempty"`
+}
+
+// BuildStep represents a TeamCity build step
+type BuildStep struct {
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Type       string            `json:"type"`
+	Disabled   bool              `json:"disabled"`
+	Properties map[string]string `json:"properties,omitempty"`
+}
+
+// VCSRoot represents a TeamCity VCS root
+type VCSRoot struct {
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	VcsName    string            `json:"vcsName"`
+	Properties map[string]string `json:"properties,omitempty"`
+}
+
+// DetailedBuildType represents a TeamCity build configuration with detailed information
+type DetailedBuildType struct {
+	BuildType
+	Parameters []Parameter `json:"parameters,omitempty"`
+	Steps      []BuildStep `json:"steps,omitempty"`
+	VcsRoots   []VCSRoot   `json:"vcs-roots,omitempty"`
+	Enabled    bool        `json:"enabled"`
+	Paused     bool        `json:"paused"`
+	Template   bool        `json:"template"`
+}
+
 // NewClient creates a new TeamCity client
 func NewClient(cfg config.TeamCityConfig, logger *zap.SugaredLogger) (*Client, error) {
 	timeout, err := time.ParseDuration(cfg.Timeout)
@@ -633,12 +668,35 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 		if build.BranchName != "" {
 			result += fmt.Sprintf("  Branch: %s\n", build.BranchName)
 		}
+		
+		// Enhanced time information with duration calculation
+		if build.QueuedDate != "" {
+			result += fmt.Sprintf("  Queued: %s\n", c.formatTeamCityDate(build.QueuedDate))
+		}
 		if build.StartDate != "" {
-			result += fmt.Sprintf("  Started: %s\n", build.StartDate)
+			result += fmt.Sprintf("  Started: %s\n", c.formatTeamCityDate(build.StartDate))
 		}
 		if build.FinishDate != "" {
-			result += fmt.Sprintf("  Finished: %s\n", build.FinishDate)
+			result += fmt.Sprintf("  Finished: %s\n", c.formatTeamCityDate(build.FinishDate))
 		}
+		
+		// Calculate and display durations
+		if build.QueuedDate != "" && build.StartDate != "" {
+			if queueTime := c.calculateDuration(build.QueuedDate, build.StartDate); queueTime != "" {
+				result += fmt.Sprintf("  Queue Time: %s\n", queueTime)
+			}
+		}
+		if build.StartDate != "" && build.FinishDate != "" {
+			if buildTime := c.calculateDuration(build.StartDate, build.FinishDate); buildTime != "" {
+				result += fmt.Sprintf("  Build Time: %s\n", buildTime)
+			}
+		}
+		if build.QueuedDate != "" && build.FinishDate != "" {
+			if totalTime := c.calculateDuration(build.QueuedDate, build.FinishDate); totalTime != "" {
+				result += fmt.Sprintf("  Total Time: %s\n", totalTime)
+			}
+		}
+		
 		result += "\n"
 	}
 
@@ -647,6 +705,78 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 	}
 
 	return result, nil
+}
+
+// formatTeamCityDate formats TeamCity date string to a more readable format
+func (c *Client) formatTeamCityDate(tcDate string) string {
+	// TeamCity format: 20241226T143022+0300
+	if tcDate == "" {
+		return ""
+	}
+	
+	// Parse TeamCity date format
+	t, err := time.Parse("20060102T150405-0700", tcDate)
+	if err != nil {
+		// Try alternative format without timezone
+		t, err = time.Parse("20060102T150405", tcDate)
+		if err != nil {
+			// If parsing fails, return original
+			return tcDate
+		}
+	}
+	
+	// Return in more readable format
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// calculateDuration calculates duration between two TeamCity date strings
+func (c *Client) calculateDuration(startDate, endDate string) string {
+	if startDate == "" || endDate == "" {
+		return ""
+	}
+	
+	// Parse start date
+	start, err := time.Parse("20060102T150405-0700", startDate)
+	if err != nil {
+		start, err = time.Parse("20060102T150405", startDate)
+		if err != nil {
+			return ""
+		}
+	}
+	
+	// Parse end date  
+	end, err := time.Parse("20060102T150405-0700", endDate)
+	if err != nil {
+		end, err = time.Parse("20060102T150405", endDate)
+		if err != nil {
+			return ""
+		}
+	}
+	
+	duration := end.Sub(start)
+	
+	// Format duration in human-readable format
+	if duration < 0 {
+		return ""
+	}
+	
+	if duration < time.Minute {
+		return fmt.Sprintf("%ds", int(duration.Seconds()))
+	} else if duration < time.Hour {
+		minutes := int(duration.Minutes())
+		seconds := int(duration.Seconds()) % 60
+		if seconds == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	} else {
+		hours := int(duration.Hours())
+		minutes := int(duration.Minutes()) % 60
+		if minutes == 0 {
+			return fmt.Sprintf("%dh", hours)
+		}
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
 }
 
 // FetchBuildLog fetches the build log for a specific build
@@ -746,6 +876,315 @@ func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (strin
 		req.BuildID, lineCount, len(respBody), logContent)
 
 	return result, nil
+}
+
+// SearchBuildConfigurations searches for build configurations with comprehensive filters including parameters, steps, and VCS roots
+func (c *Client) SearchBuildConfigurations(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		// Basic filters
+		ProjectID string `json:"projectId"`
+		Name      string `json:"name"`
+		Enabled   *bool  `json:"enabled"`
+		Paused    *bool  `json:"paused"`
+		Template  *bool  `json:"template"`
+		Count     int    `json:"count"`
+
+		// Advanced filters for detailed search
+		ParameterName  string `json:"parameterName"`
+		ParameterValue string `json:"parameterValue"`
+		StepType       string `json:"stepType"`
+		StepName       string `json:"stepName"`
+		VcsType        string `json:"vcsType"`
+		IncludeDetails bool   `json:"includeDetails"` // Whether to fetch detailed info
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("search_build_configurations", "success", time.Since(start).Seconds())
+	}()
+
+	// First, get basic build configurations matching basic criteria
+	basicConfigs, err := c.getBasicBuildConfigurations(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get basic configurations: %w", err)
+	}
+
+	var matchingConfigs []DetailedBuildType
+
+	// For each configuration, check detailed criteria if requested
+	for _, config := range basicConfigs {
+		if req.IncludeDetails || req.ParameterName != "" || req.ParameterValue != "" ||
+			req.StepType != "" || req.StepName != "" || req.VcsType != "" {
+
+			detailed, err := c.getBuildConfigurationDetails(ctx, config.ID)
+			if err != nil {
+				c.logger.Warn("Failed to get details for build configuration", "id", config.ID, "error", err)
+				continue
+			}
+
+			// Apply detailed filters
+			if c.matchesDetailedCriteria(detailed, req) {
+				matchingConfigs = append(matchingConfigs, *detailed)
+			}
+		} else {
+			// If no detailed criteria, just convert basic to detailed
+			matchingConfigs = append(matchingConfigs, DetailedBuildType{
+				BuildType: config,
+			})
+		}
+	}
+
+	// Format response
+	return c.formatDetailedSearchResults(matchingConfigs, req.IncludeDetails), nil
+}
+
+// getBasicBuildConfigurations gets configurations using basic filters
+func (c *Client) getBasicBuildConfigurations(ctx context.Context, req struct {
+	ProjectID      string `json:"projectId"`
+	Name           string `json:"name"`
+	Enabled        *bool  `json:"enabled"`
+	Paused         *bool  `json:"paused"`
+	Template       *bool  `json:"template"`
+	Count          int    `json:"count"`
+	ParameterName  string `json:"parameterName"`
+	ParameterValue string `json:"parameterValue"`
+	StepType       string `json:"stepType"`
+	StepName       string `json:"stepName"`
+	VcsType        string `json:"vcsType"`
+	IncludeDetails bool   `json:"includeDetails"`
+}) ([]BuildType, error) {
+	// Build query parameters
+	params := make([]string, 0)
+
+	if req.ProjectID != "" {
+		params = append(params, fmt.Sprintf("project:%s", req.ProjectID))
+	}
+	if req.Name != "" {
+		params = append(params, fmt.Sprintf("name:%s", req.Name))
+	}
+	if req.Enabled != nil {
+		params = append(params, fmt.Sprintf("enabled:%t", *req.Enabled))
+	}
+	if req.Paused != nil {
+		params = append(params, fmt.Sprintf("paused:%t", *req.Paused))
+	}
+	if req.Template != nil {
+		params = append(params, fmt.Sprintf("template:%t", *req.Template))
+	}
+
+	// Set default count if not specified
+	count := req.Count
+	if count == 0 {
+		count = 100
+	}
+
+	// Build endpoint with locator
+	endpoint := "/buildTypes"
+	if len(params) > 0 {
+		locator := fmt.Sprintf("count:%d", count)
+		for _, param := range params {
+			locator += "," + param
+		}
+		endpoint += "?locator=" + locator
+	} else {
+		endpoint += fmt.Sprintf("?locator=count:%d", count)
+	}
+
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search build configurations: %w", err)
+	}
+
+	var response struct {
+		Count     int         `json:"count"`
+		BuildType []BuildType `json:"buildType"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse build configurations response: %w", err)
+	}
+
+	return response.BuildType, nil
+}
+
+// getBuildConfigurationDetails gets detailed information for a specific build configuration
+func (c *Client) getBuildConfigurationDetails(ctx context.Context, buildTypeID string) (*DetailedBuildType, error) {
+	// Get basic build type info
+	respBody, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s", buildTypeID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get build type details: %w", err)
+	}
+
+	var buildType DetailedBuildType
+	if err := json.Unmarshal(respBody, &buildType); err != nil {
+		return nil, fmt.Errorf("failed to parse build type details: %w", err)
+	}
+
+	// Get parameters
+	paramResp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s/parameters", buildTypeID), nil)
+	if err != nil {
+		c.logger.Warn("Failed to get parameters", "buildTypeId", buildTypeID, "error", err)
+	} else {
+		var paramResponse struct {
+			Property []Parameter `json:"property"`
+		}
+		if err := json.Unmarshal(paramResp, &paramResponse); err == nil {
+			buildType.Parameters = paramResponse.Property
+		}
+	}
+
+	// Get build steps
+	stepsResp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s/steps", buildTypeID), nil)
+	if err != nil {
+		c.logger.Warn("Failed to get steps", "buildTypeId", buildTypeID, "error", err)
+	} else {
+		var stepsResponse struct {
+			Step []BuildStep `json:"step"`
+		}
+		if err := json.Unmarshal(stepsResp, &stepsResponse); err == nil {
+			buildType.Steps = stepsResponse.Step
+		}
+	}
+
+	// Get VCS roots
+	vcsResp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s/vcs-root-entries", buildTypeID), nil)
+	if err != nil {
+		c.logger.Warn("Failed to get VCS roots", "buildTypeId", buildTypeID, "error", err)
+	} else {
+		var vcsResponse struct {
+			VcsRootEntry []struct {
+				VcsRoot VCSRoot `json:"vcs-root"`
+			} `json:"vcs-root-entry"`
+		}
+		if err := json.Unmarshal(vcsResp, &vcsResponse); err == nil {
+			for _, entry := range vcsResponse.VcsRootEntry {
+				buildType.VcsRoots = append(buildType.VcsRoots, entry.VcsRoot)
+			}
+		}
+	}
+
+	return &buildType, nil
+}
+
+// matchesDetailedCriteria checks if a configuration matches detailed search criteria
+func (c *Client) matchesDetailedCriteria(config *DetailedBuildType, req struct {
+	ProjectID      string `json:"projectId"`
+	Name           string `json:"name"`
+	Enabled        *bool  `json:"enabled"`
+	Paused         *bool  `json:"paused"`
+	Template       *bool  `json:"template"`
+	Count          int    `json:"count"`
+	ParameterName  string `json:"parameterName"`
+	ParameterValue string `json:"parameterValue"`
+	StepType       string `json:"stepType"`
+	StepName       string `json:"stepName"`
+	VcsType        string `json:"vcsType"`
+	IncludeDetails bool   `json:"includeDetails"`
+}) bool {
+	// Check parameter criteria
+	if req.ParameterName != "" || req.ParameterValue != "" {
+		paramMatch := false
+		for _, param := range config.Parameters {
+			nameMatch := req.ParameterName == "" || strings.Contains(strings.ToLower(param.Name), strings.ToLower(req.ParameterName))
+			valueMatch := req.ParameterValue == "" || strings.Contains(strings.ToLower(param.Value), strings.ToLower(req.ParameterValue))
+
+			if nameMatch && valueMatch {
+				paramMatch = true
+				break
+			}
+		}
+		if !paramMatch {
+			return false
+		}
+	}
+
+	// Check step criteria
+	if req.StepType != "" || req.StepName != "" {
+		stepMatch := false
+		for _, step := range config.Steps {
+			typeMatch := req.StepType == "" || strings.Contains(strings.ToLower(step.Type), strings.ToLower(req.StepType))
+			nameMatch := req.StepName == "" || strings.Contains(strings.ToLower(step.Name), strings.ToLower(req.StepName))
+
+			if typeMatch && nameMatch {
+				stepMatch = true
+				break
+			}
+		}
+		if !stepMatch {
+			return false
+		}
+	}
+
+	// Check VCS criteria
+	if req.VcsType != "" {
+		vcsMatch := false
+		for _, vcs := range config.VcsRoots {
+			if strings.Contains(strings.ToLower(vcs.VcsName), strings.ToLower(req.VcsType)) {
+				vcsMatch = true
+				break
+			}
+		}
+		if !vcsMatch {
+			return false
+		}
+	}
+
+	return true
+}
+
+// formatDetailedSearchResults formats the search results
+func (c *Client) formatDetailedSearchResults(configs []DetailedBuildType, includeDetails bool) string {
+	if len(configs) == 0 {
+		return "No build configurations found matching the specified criteria."
+	}
+
+	result := fmt.Sprintf("Found %d build configurations:\n\n", len(configs))
+
+	for _, config := range configs {
+		result += fmt.Sprintf("Configuration: %s (%s)\n", config.Name, config.ID)
+		result += fmt.Sprintf("  Project: %s (%s)\n", config.Project.Name, config.ProjectID)
+
+		if config.Description != "" {
+			result += fmt.Sprintf("  Description: %s\n", config.Description)
+		}
+
+		if includeDetails {
+			// Add parameters
+			if len(config.Parameters) > 0 {
+				result += "  Parameters:\n"
+				for _, param := range config.Parameters {
+					result += fmt.Sprintf("    %s = %s\n", param.Name, param.Value)
+				}
+			}
+
+			// Add steps
+			if len(config.Steps) > 0 {
+				result += "  Build Steps:\n"
+				for i, step := range config.Steps {
+					status := ""
+					if step.Disabled {
+						status = " (disabled)"
+					}
+					result += fmt.Sprintf("    %d. %s [%s]%s\n", i+1, step.Name, step.Type, status)
+				}
+			}
+
+			// Add VCS roots
+			if len(config.VcsRoots) > 0 {
+				result += "  VCS Roots:\n"
+				for _, vcs := range config.VcsRoots {
+					result += fmt.Sprintf("    %s (%s)\n", vcs.Name, vcs.VcsName)
+				}
+			}
+		}
+
+		result += "\n"
+	}
+
+	return result
 }
 
 // GetTestFailures returns failing tests for a specific build

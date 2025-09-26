@@ -342,6 +342,65 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				"required": []string{"buildId"},
 			},
 		},
+		{
+			"name":        "search_build_configurations",
+			"description": "Search for build configurations with comprehensive filters including basic filters, parameters, steps, and VCS roots",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"projectId": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by project ID",
+					},
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by configuration name (partial matching)",
+					},
+					"enabled": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by enabled status",
+					},
+					"paused": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter by paused status",
+					},
+					"template": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Filter templates (true) or regular configurations (false)",
+					},
+					"parameterName": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by parameter name (partial matching)",
+					},
+					"parameterValue": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by parameter value (partial matching)",
+					},
+					"stepType": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by build step type (e.g., 'gradle', 'docker', 'powershell')",
+					},
+					"stepName": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by build step name (partial matching)",
+					},
+					"vcsType": map[string]interface{}{
+						"type":        "string",
+						"description": "Search by VCS type (e.g., 'git', 'subversion')",
+					},
+					"includeDetails": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Include detailed information (parameters, steps, VCS) in results (default: false)",
+					},
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of configurations to return (default: 100)",
+						"minimum":     1,
+						"maximum":     1000,
+					},
+				},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -445,6 +504,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.SearchBuilds(ctx, args)
 	case "fetch_build_log":
 		return h.tc.FetchBuildLog(ctx, args)
+	case "search_build_configurations":
+		return h.tc.SearchBuildConfigurations(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
