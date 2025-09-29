@@ -668,7 +668,7 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 		if build.BranchName != "" {
 			result += fmt.Sprintf("  Branch: %s\n", build.BranchName)
 		}
-		
+
 		// Enhanced time information with duration calculation
 		if build.QueuedDate != "" {
 			result += fmt.Sprintf("  Queued: %s\n", c.formatTeamCityDate(build.QueuedDate))
@@ -679,7 +679,7 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 		if build.FinishDate != "" {
 			result += fmt.Sprintf("  Finished: %s\n", c.formatTeamCityDate(build.FinishDate))
 		}
-		
+
 		// Calculate and display durations
 		if build.QueuedDate != "" && build.StartDate != "" {
 			if queueTime := c.calculateDuration(build.QueuedDate, build.StartDate); queueTime != "" {
@@ -696,7 +696,7 @@ func (c *Client) SearchBuilds(ctx context.Context, args json.RawMessage) (string
 				result += fmt.Sprintf("  Total Time: %s\n", totalTime)
 			}
 		}
-		
+
 		result += "\n"
 	}
 
@@ -713,7 +713,7 @@ func (c *Client) formatTeamCityDate(tcDate string) string {
 	if tcDate == "" {
 		return ""
 	}
-	
+
 	// Parse TeamCity date format
 	t, err := time.Parse("20060102T150405-0700", tcDate)
 	if err != nil {
@@ -724,7 +724,7 @@ func (c *Client) formatTeamCityDate(tcDate string) string {
 			return tcDate
 		}
 	}
-	
+
 	// Return in more readable format
 	return t.Format("2006-01-02 15:04:05")
 }
@@ -734,7 +734,7 @@ func (c *Client) calculateDuration(startDate, endDate string) string {
 	if startDate == "" || endDate == "" {
 		return ""
 	}
-	
+
 	// Parse start date
 	start, err := time.Parse("20060102T150405-0700", startDate)
 	if err != nil {
@@ -743,8 +743,8 @@ func (c *Client) calculateDuration(startDate, endDate string) string {
 			return ""
 		}
 	}
-	
-	// Parse end date  
+
+	// Parse end date
 	end, err := time.Parse("20060102T150405-0700", endDate)
 	if err != nil {
 		end, err = time.Parse("20060102T150405", endDate)
@@ -752,14 +752,14 @@ func (c *Client) calculateDuration(startDate, endDate string) string {
 			return ""
 		}
 	}
-	
+
 	duration := end.Sub(start)
-	
+
 	// Format duration in human-readable format
 	if duration < 0 {
 		return ""
 	}
-	
+
 	if duration < time.Minute {
 		return fmt.Sprintf("%ds", int(duration.Seconds()))
 	} else if duration < time.Hour {

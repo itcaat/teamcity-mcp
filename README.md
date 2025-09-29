@@ -91,6 +91,7 @@ curl -X POST http://localhost:8123/mcp \
 - **Advanced Search**: Comprehensive build search with multiple filters (status, branch, user, dates, tags)
 - **Production Ready**: Docker, Kubernetes, monitoring, caching, and comprehensive logging
 - **Environment-Based Configuration**: No config files needed, everything via environment variables
+- **AI Time Awareness**: Provides real current date/time to prevent AI models from using training data dates
 
 ## Environment Variables Reference
 
@@ -412,7 +413,7 @@ curl -X POST http://localhost:8123/mcp \
 
 ## Available Tools
 
-The TeamCity MCP server provides 8 powerful tools for managing builds:
+The TeamCity MCP server provides 9 powerful tools for managing builds:
 
 ### 1. trigger_build
 Trigger a new build in TeamCity.
@@ -798,6 +799,32 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
+### 9. get_current_time
+Get the current server date and time to ensure AI models use real current time instead of training data dates.
+
+**Parameters:**
+- `format` (optional): Date format (rfc3339, date, timestamp, or custom Go format)
+- `timezone` (optional): Timezone (e.g., 'UTC', 'Local', 'America/New_York')
+
+**Example:**
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 19,
+    "method": "tools/call",
+    "params": {
+      "name": "get_current_time",
+      "arguments": {
+        "format": "rfc3339",
+        "timezone": "UTC"
+      }
+    }
+  }'
+```
+
 
 ### Local Binary Configuration
 
@@ -836,6 +863,9 @@ Once configured, you can use natural language commands like:
 - **"Show me all configurations using Git VCS"**
 - **"Find Docker-based build configurations"**
 - **"Search for configurations with specific parameter names"**
+- **"What's the current date and time?"**
+- **"Get current time in UTC"**
+- **"Show me today's date"**
 
 The AI will automatically use the appropriate TeamCity tools to fulfill your requests.
 
@@ -847,6 +877,7 @@ The server exposes TeamCity data as MCP resources:
 - **`teamcity://buildTypes`** - List all build configurations
 - **`teamcity://builds`** - List recent builds
 - **`teamcity://agents`** - List build agents
+- **`teamcity://runtime`** - Current server date, time, and runtime information
 
 ## Troubleshooting
 

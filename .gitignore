@@ -60,3 +60,4 @@ testdata/output/
 
 # Cache directories
 .cache/ 
+server

@@ -82,6 +82,7 @@ func (h *Handler) HandleRequest(ctx context.Context, req json.RawMessage) (inter
 
 // handleInitialize handles the initialize request
 func (h *Handler) handleInitialize(id interface{}, params json.RawMessage) (interface{}, error) {
+	currentTime := time.Now()
 	return h.successResponse(id, map[string]interface{}{
 		"protocolVersion": "2024-11-05",
 		"capabilities": map[string]interface{}{
@@ -93,8 +94,11 @@ func (h *Handler) handleInitialize(id interface{}, params json.RawMessage) (inte
 			"logging": map[string]interface{}{},
 		},
 		"serverInfo": map[string]interface{}{
-			"name":    "teamcity-mcp",
-			"version": "1.0.0",
+			"name":        "teamcity-mcp",
+			"version":     "1.0.0",
+			"currentTime": currentTime.Format(time.RFC3339),
+			"currentDate": currentTime.Format("2006-01-02"),
+			"timezone":    currentTime.Location().String(),
 		},
 	}), nil
 }
@@ -401,6 +405,25 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "get_current_time",
+			"description": "Get the current server date and time - use this to get the real current date/time instead of assuming any training data dates",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"format": map[string]interface{}{
+						"type":        "string",
+						"description": "Date format (rfc3339, date, timestamp, or custom Go format)",
+						"default":     "rfc3339",
+					},
+					"timezone": map[string]interface{}{
+						"type":        "string",
+						"description": "Timezone (e.g., 'UTC', 'Local', 'America/New_York')",
+						"default":     "Local",
+					},
+				},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -476,6 +499,8 @@ func (h *Handler) listResources(ctx context.Context, uri string) ([]interface{},
 		return h.listBuilds(ctx)
 	case uri == "teamcity://agents":
 		return h.listAgents(ctx)
+	case uri == "teamcity://runtime":
+		return h.listRuntimeInfo(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported resource URI: %s", uri)
 	}
@@ -483,6 +508,11 @@ func (h *Handler) listResources(ctx context.Context, uri string) ([]interface{},
 
 // readResource reads a specific resource
 func (h *Handler) readResource(ctx context.Context, uri string) (interface{}, error) {
+	// Handle runtime resource separately
+	if uri == "teamcity://runtime" {
+		return h.getRuntimeInfo(ctx)
+	}
+
 	// Parse URI and delegate to appropriate handler
 	return h.tc.GetResource(ctx, uri)
 }
@@ -506,6 +536,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.FetchBuildLog(ctx, args)
 	case "search_build_configurations":
 		return h.tc.SearchBuildConfigurations(ctx, args)
+	case "get_current_time":
+		return h.getCurrentTime(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -526,4 +558,88 @@ func (h *Handler) listBuilds(ctx context.Context) ([]interface{}, error) {
 
 func (h *Handler) listAgents(ctx context.Context) ([]interface{}, error) {
 	return h.tc.ListAgents(ctx)
+}
+
+// listRuntimeInfo lists runtime information resources
+func (h *Handler) listRuntimeInfo(ctx context.Context) ([]interface{}, error) {
+	return []interface{}{
+		map[string]interface{}{
+			"uri":         "teamcity://runtime",
+			"name":        "Runtime Information",
+			"description": "Current server date, time, and runtime information",
+			"mimeType":    "application/json",
+		},
+	}, nil
+}
+
+// getRuntimeInfo returns current runtime information
+func (h *Handler) getRuntimeInfo(ctx context.Context) (interface{}, error) {
+	currentTime := time.Now()
+
+	return map[string]interface{}{
+		"type":             "runtime-info",
+		"currentTime":      currentTime.Format(time.RFC3339),
+		"currentDate":      currentTime.Format("2006-01-02"),
+		"currentTimestamp": currentTime.Unix(),
+		"timezone":         currentTime.Location().String(),
+		"utcTime":          currentTime.UTC().Format(time.RFC3339),
+		"utcDate":          currentTime.UTC().Format("2006-01-02"),
+		"utcTimestamp":     currentTime.UTC().Unix(),
+		"serverInfo": map[string]interface{}{
+			"name":    "teamcity-mcp",
+			"version": "1.0.0",
+		},
+		"note": "This is the REAL current date and time. Do not use any training data dates. Use this information for all time-based queries and operations.",
+	}, nil
+}
+
+// getCurrentTime tool implementation
+func (h *Handler) getCurrentTime(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		Format   string `json:"format"`
+		Timezone string `json:"timezone"`
+	}
+
+	// Set defaults
+	req.Format = "rfc3339"
+	req.Timezone = "Local"
+
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &req); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+	}
+
+	currentTime := time.Now()
+
+	// Handle timezone
+	if req.Timezone != "Local" {
+		if req.Timezone == "UTC" {
+			currentTime = currentTime.UTC()
+		} else {
+			loc, err := time.LoadLocation(req.Timezone)
+			if err != nil {
+				return "", fmt.Errorf("invalid timezone '%s': %w", req.Timezone, err)
+			}
+			currentTime = currentTime.In(loc)
+		}
+	}
+
+	var result string
+
+	// Handle format
+	switch req.Format {
+	case "rfc3339":
+		result = currentTime.Format(time.RFC3339)
+	case "date":
+		result = currentTime.Format("2006-01-02")
+	case "timestamp":
+		result = fmt.Sprintf("%d", currentTime.Unix())
+	default:
+		// Treat as custom Go time format
+		result = currentTime.Format(req.Format)
+	}
+
+	return fmt.Sprintf("Current time: %s\nTimezone: %s\nNote: This is the REAL current date/time. Use this for all time-based operations instead of any training data dates.",
+		result, currentTime.Location().String()), nil
 }

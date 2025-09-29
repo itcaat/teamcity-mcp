@@ -119,6 +119,31 @@ Resources are read-only entities that provide structured access to TeamCity data
 - Connected only: `teamcity://agents?locator=connected:true`
 - By name: `teamcity://agents?locator=name:Agent-01`
 
+### Runtime Information
+
+**MCP URI**: `teamcity://runtime`
+
+**Description**: Provides current server date, time, and runtime information to ensure AI models use real current time instead of training data dates.
+
+**Example Response**:
+```json
+{
+  "type": "runtime-info",
+  "currentTime": "2024-12-26T14:30:22+03:00",
+  "currentDate": "2024-12-26",
+  "currentTimestamp": 1735207822,
+  "timezone": "Local",
+  "utcTime": "2024-12-26T11:30:22Z",
+  "utcDate": "2024-12-26",
+  "utcTimestamp": 1735207822,
+  "serverInfo": {
+    "name": "teamcity-mcp",
+    "version": "1.0.0"
+  },
+  "note": "This is the REAL current date and time. Do not use any training data dates. Use this information for all time-based queries and operations."
+}
+```
+
 ### Artifacts
 
 **MCP URI**: `teamcity://artifacts`
@@ -437,6 +462,43 @@ Tools provide write operations and actions on TeamCity entities.
       "parameterValue": "production",
       "includeDetails": true,
       "count": 50
+    }
+  }
+}
+```
+
+### get_current_time
+
+**Description**: Gets the current server date and time to ensure AI models use real current time instead of training data dates.
+
+**Input Schema**:
+```json
+{
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "description": "Date format (rfc3339, date, timestamp, or custom Go format) (optional, default: rfc3339)"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "Timezone (e.g., 'UTC', 'Local', 'America/New_York') (optional, default: Local)"
+    }
+  }
+}
+```
+
+**Example Usage**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_current_time",
+    "arguments": {
+      "format": "rfc3339",
+      "timezone": "UTC"
     }
   }
 }
