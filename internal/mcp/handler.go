@@ -64,6 +64,10 @@ func (h *Handler) HandleRequest(ctx context.Context, req json.RawMessage) (inter
 		return h.handleInitialized(baseReq.ID)
 	case "notifications/initialized":
 		return h.handleInitialized(baseReq.ID)
+	case "notifications/cancelled":
+		// Handle cancellation notifications - just log and return nil (no response for notifications)
+		h.logger.Debug("Received cancellation notification")
+		return nil, nil
 	case "resources/list":
 		return h.handleResourcesList(ctx, baseReq.ID, baseReq.Params)
 	case "resources/read":
@@ -76,7 +80,12 @@ func (h *Handler) HandleRequest(ctx context.Context, req json.RawMessage) (inter
 		return h.handlePing(baseReq.ID)
 	default:
 		h.logger.Warn("Unknown method called", "method", baseReq.Method, "id", baseReq.ID)
-		return h.errorResponse(baseReq.ID, -32601, "Method not found", nil), nil
+		// Only return an error response if this is a request (has an ID), not a notification
+		if baseReq.ID != nil {
+			return h.errorResponse(baseReq.ID, -32601, "Method not found", nil), nil
+		}
+		// For notifications, just return nil (no response)
+		return nil, nil
 	}
 }
 
@@ -115,8 +124,11 @@ func (h *Handler) handleResourcesList(ctx context.Context, id interface{}, param
 		URI string `json:"uri"`
 	}
 
-	if err := json.Unmarshal(params, &req); err != nil {
-		return h.errorResponse(id, -32602, "Invalid params", nil), nil
+	// Params can be empty or null for resources/list
+	if len(params) > 0 && string(params) != "null" {
+		if err := json.Unmarshal(params, &req); err != nil {
+			return h.errorResponse(id, -32602, "Invalid params", nil), nil
+		}
 	}
 
 	resources, err := h.listResources(ctx, req.URI)
@@ -424,6 +436,37 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "get_test_results",
+			"description": "Get test results for a specific build. Returns test names, status, duration, and optionally error details/stack traces for failed tests. Use includeDetails=true to get full error messages and stack traces for debugging test failures.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"buildId": map[string]interface{}{
+						"type":        "string",
+						"description": "Build ID to get test results for (required). Example: '19333979'",
+					},
+					"status": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by test status (optional). Use 'FAILURE' to see only failed tests.",
+						"enum":        []string{"SUCCESS", "FAILURE", "UNKNOWN", "IGNORED"},
+					},
+					"includeDetails": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Include detailed error messages and stack traces for failed tests (optional, default: false). Set to true when investigating test failures.",
+						"default":     false,
+					},
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of tests to return (optional, default: 100, max: 1000)",
+						"minimum":     1,
+						"maximum":     1000,
+						"default":     100,
+					},
+				},
+				"required": []string{"buildId"},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -444,6 +487,7 @@ func (h *Handler) handleToolsCall(ctx context.Context, id interface{}, params js
 
 	result, err := h.callTool(ctx, req.Name, req.Arguments)
 	if err != nil {
+		h.logger.Error("Tool execution failed", "tool", req.Name, "error", err.Error())
 		return h.errorResponse(id, -32603, "Tool execution failed", err.Error()), nil
 	}
 
@@ -490,16 +534,53 @@ func (h *Handler) errorResponse(id interface{}, code int, message string, data i
 
 // listResources lists available resources
 func (h *Handler) listResources(ctx context.Context, uri string) ([]interface{}, error) {
-	switch {
-	case uri == "teamcity://projects" || uri == "":
+	// When uri is empty, return the list of available resource types (not the actual data)
+	if uri == "" {
+		return []interface{}{
+			map[string]interface{}{
+				"uri":         "teamcity://projects",
+				"name":        "Projects",
+				"description": "TeamCity projects",
+				"mimeType":    "application/json",
+			},
+			map[string]interface{}{
+				"uri":         "teamcity://buildTypes",
+				"name":        "Build Types",
+				"description": "TeamCity build configurations",
+				"mimeType":    "application/json",
+			},
+			map[string]interface{}{
+				"uri":         "teamcity://builds",
+				"name":        "Builds",
+				"description": "Recent TeamCity builds",
+				"mimeType":    "application/json",
+			},
+			map[string]interface{}{
+				"uri":         "teamcity://agents",
+				"name":        "Agents",
+				"description": "TeamCity build agents",
+				"mimeType":    "application/json",
+			},
+			map[string]interface{}{
+				"uri":         "teamcity://runtime",
+				"name":        "Runtime Information",
+				"description": "Current server date, time, and runtime information",
+				"mimeType":    "application/json",
+			},
+		}, nil
+	}
+
+	// When a specific URI is requested, fetch the actual data
+	switch uri {
+	case "teamcity://projects":
 		return h.listProjects(ctx)
-	case uri == "teamcity://buildTypes":
+	case "teamcity://buildTypes":
 		return h.listBuildTypes(ctx)
-	case uri == "teamcity://builds":
+	case "teamcity://builds":
 		return h.listBuilds(ctx)
-	case uri == "teamcity://agents":
+	case "teamcity://agents":
 		return h.listAgents(ctx)
-	case uri == "teamcity://runtime":
+	case "teamcity://runtime":
 		return h.listRuntimeInfo(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported resource URI: %s", uri)
@@ -538,6 +619,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.SearchBuildConfigurations(ctx, args)
 	case "get_current_time":
 		return h.getCurrentTime(ctx, args)
+	case "get_test_results":
+		return h.tc.GetTestResults(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

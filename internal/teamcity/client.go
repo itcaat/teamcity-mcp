@@ -100,6 +100,17 @@ type DetailedBuildType struct {
 	Template   bool        `json:"template"`
 }
 
+// TestOccurrence represents a TeamCity test occurrence
+type TestOccurrence struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Duration int    `json:"duration"`
+	Details  string `json:"details,omitempty"`
+	Href     string `json:"href,omitempty"`
+	Muted    bool   `json:"muted,omitempty"`
+}
+
 // NewClient creates a new TeamCity client
 func NewClient(cfg config.TeamCityConfig, logger *zap.SugaredLogger) (*Client, error) {
 	timeout, err := time.ParseDuration(cfg.Timeout)
@@ -1236,4 +1247,146 @@ func (c *Client) GetTestFailures(ctx context.Context, args json.RawMessage) (str
 		result += "\n"
 	}
 	return result, nil
+}
+
+// GetTestResults returns test results for a specific build with optional filtering
+func (c *Client) GetTestResults(ctx context.Context, args json.RawMessage) (string, error) {
+	var req struct {
+		BuildID        string `json:"buildId"`
+		Status         string `json:"status,omitempty"`
+		IncludeDetails bool   `json:"includeDetails,omitempty"`
+		Count          int    `json:"count,omitempty"`
+	}
+
+	if err := json.Unmarshal(args, &req); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	if req.BuildID == "" {
+		return "", fmt.Errorf("buildId is required")
+	}
+
+	start := time.Now()
+	defer func() {
+		metrics.RecordTeamCityRequest("get_test_results", "success", time.Since(start).Seconds())
+	}()
+
+	// Build the locator string (similar to GetTestFailures)
+	locator := fmt.Sprintf("build:(id:%s)", req.BuildID)
+	if req.Status != "" {
+		locator += fmt.Sprintf(",status:%s", req.Status)
+	}
+
+	// Set default count if not specified
+	count := req.Count
+	if count == 0 {
+		count = 100
+	}
+	locator += fmt.Sprintf(",count:%d", count)
+
+	endpoint := fmt.Sprintf("/testOccurrences?locator=%s", locator)
+
+	// Add fields parameter when details are requested
+	if req.IncludeDetails {
+		endpoint += "&fields=testOccurrence(id,name,status,duration,muted,details)"
+	}
+
+	c.logger.Debug("Fetching test results", "endpoint", endpoint, "buildId", req.BuildID)
+
+	respBody, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get test results: %w", err)
+	}
+
+	c.logger.Debug("Received test results response", "bodyLength", len(respBody))
+
+	// First, try to parse the response to see what structure we have
+	var rawResponse map[string]interface{}
+	if err := json.Unmarshal(respBody, &rawResponse); err != nil {
+		c.logger.Error("Failed to parse test results as map", "error", err, "body", string(respBody))
+		return "", fmt.Errorf("failed to parse test results response: %w", err)
+	}
+
+	c.logger.Debug("Raw response keys", "keys", fmt.Sprintf("%v", getKeys(rawResponse)))
+
+	var response struct {
+		Count          int              `json:"count"`
+		TestOccurrence []TestOccurrence `json:"testOccurrence"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		c.logger.Error("Failed to parse test results", "error", err, "body", string(respBody))
+		return "", fmt.Errorf("failed to parse test results response: %w", err)
+	}
+
+	c.logger.Debug("Parsed test results", "count", response.Count, "occurrences", len(response.TestOccurrence))
+
+	// Check if we actually have no tests (use occurrence length, not count field)
+	if len(response.TestOccurrence) == 0 {
+		statusMsg := "any status"
+		if req.Status != "" {
+			statusMsg = fmt.Sprintf("status: %s", req.Status)
+		}
+		return fmt.Sprintf("No tests found for build %s with %s.", req.BuildID, statusMsg), nil
+	}
+
+	// Format the results (use actual test count, not the count field which may be missing)
+	testCount := len(response.TestOccurrence)
+	result := fmt.Sprintf("Found %d test(s) for build %s", testCount, req.BuildID)
+	if req.Status != "" {
+		result += fmt.Sprintf(" (status: %s)", req.Status)
+	}
+	result += ":\n\n"
+
+	// Group tests by status for better readability
+	statusGroups := make(map[string][]TestOccurrence)
+	for _, test := range response.TestOccurrence {
+		statusGroups[test.Status] = append(statusGroups[test.Status], test)
+	}
+
+	// Display tests grouped by status
+	for status, tests := range statusGroups {
+		result += fmt.Sprintf("%s (%d):\n", status, len(tests))
+		for _, test := range tests {
+			result += fmt.Sprintf("  - %s", test.Name)
+
+			// Format duration
+			if test.Duration > 0 {
+				if test.Duration < 1000 {
+					result += fmt.Sprintf(" (%d ms)", test.Duration)
+				} else {
+					result += fmt.Sprintf(" (%.2f s)", float64(test.Duration)/1000.0)
+				}
+			}
+
+			// Show muted status
+			if test.Muted {
+				result += " [MUTED]"
+			}
+
+			result += "\n"
+
+			// Add details if requested and available
+			if req.IncludeDetails && test.Details != "" {
+				// Indent the details
+				detailLines := strings.Split(test.Details, "\n")
+				for _, line := range detailLines {
+					if line != "" {
+						result += fmt.Sprintf("    %s\n", line)
+					}
+				}
+			}
+		}
+		result += "\n"
+	}
+
+	return result, nil
+}
+
+// getKeys returns the keys of a map for debugging
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

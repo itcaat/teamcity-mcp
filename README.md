@@ -413,7 +413,7 @@ curl -X POST http://localhost:8123/mcp \
 
 ## Available Tools
 
-The TeamCity MCP server provides 9 powerful tools for managing builds:
+The TeamCity MCP server provides 10 powerful tools for managing builds:
 
 ### 1. trigger_build
 Trigger a new build in TeamCity.
@@ -825,6 +825,75 @@ curl -X POST http://localhost:8123/mcp \
   }'
 ```
 
+### 10. get_test_results
+Get test results for a specific build with optional filtering by test status.
+
+**Parameters:**
+- `buildId` (required): Build ID to get test results for
+- `status` (optional): Filter by test status: SUCCESS, FAILURE, UNKNOWN, IGNORED
+- `includeDetails` (optional): Include test details like stack traces (default: false)
+- `count` (optional): Maximum number of tests to return (default: 100, max: 1000)
+
+**Examples:**
+
+Get all test results for a build:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 20,
+    "method": "tools/call",
+    "params": {
+      "name": "get_test_results",
+      "arguments": {
+        "buildId": "12345"
+      }
+    }
+  }'
+```
+
+Get only failed tests with details:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 21,
+    "method": "tools/call",
+    "params": {
+      "name": "get_test_results",
+      "arguments": {
+        "buildId": "12345",
+        "status": "FAILURE",
+        "includeDetails": true
+      }
+    }
+  }'
+```
+
+Get successful tests with limited count:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 22,
+    "method": "tools/call",
+    "params": {
+      "name": "get_test_results",
+      "arguments": {
+        "buildId": "12345",
+        "status": "SUCCESS",
+        "count": 50
+      }
+    }
+  }'
+```
+
 
 ### Local Binary Configuration
 
@@ -866,6 +935,11 @@ Once configured, you can use natural language commands like:
 - **"What's the current date and time?"**
 - **"Get current time in UTC"**
 - **"Show me today's date"**
+- **"Get test results for build 12345"**
+- **"Show me failed tests for the latest build"**
+- **"Get test results with details for build 12345"**
+- **"Show me all passing tests for this build"**
+- **"What tests failed in build 12345?"**
 
 The AI will automatically use the appropriate TeamCity tools to fulfill your requests.
 

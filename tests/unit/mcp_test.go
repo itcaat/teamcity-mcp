@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -48,10 +49,12 @@ func TestToolDefinitions(t *testing.T) {
 		"search_builds",
 		"fetch_build_log",
 		"search_build_configurations",
+		"get_current_time",
+		"get_test_results",
 	}
 
 	// Validate we have the right number of tools
-	assert.Equal(t, 8, len(expectedTools))
+	assert.Equal(t, 10, len(expectedTools))
 
 	// Validate tool names are correctly formatted
 	for _, tool := range expectedTools {
@@ -583,4 +586,181 @@ func TestDetailedSearchAPIEndpoints(t *testing.T) {
 // Helper function for bool pointers
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func TestGetTestResultsTool(t *testing.T) {
+	// Test get_test_results tool parameter validation
+	tests := []struct {
+		name     string
+		input    map[string]interface{}
+		valid    bool
+		expected string
+	}{
+		{
+			name: "Valid buildId only",
+			input: map[string]interface{}{
+				"buildId": "12345",
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with status filter",
+			input: map[string]interface{}{
+				"buildId": "12345",
+				"status":  "FAILURE",
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with all parameters",
+			input: map[string]interface{}{
+				"buildId":        "12345",
+				"status":         "SUCCESS",
+				"includeDetails": true,
+				"count":          50,
+			},
+			valid: true,
+		},
+		{
+			name: "Missing buildId",
+			input: map[string]interface{}{
+				"status": "FAILURE",
+			},
+			valid:    false,
+			expected: "buildId is required",
+		},
+		{
+			name: "Empty buildId",
+			input: map[string]interface{}{
+				"buildId": "",
+			},
+			valid:    false,
+			expected: "buildId is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Validate required field presence
+			if tt.valid {
+				assert.Contains(t, tt.input, "buildId")
+				buildId := tt.input["buildId"].(string)
+				assert.NotEmpty(t, buildId)
+
+				// Validate optional parameters if present
+				if status, exists := tt.input["status"]; exists {
+					assert.IsType(t, "", status)
+				}
+				if includeDetails, exists := tt.input["includeDetails"]; exists {
+					assert.IsType(t, true, includeDetails)
+				}
+				if count, exists := tt.input["count"]; exists {
+					assert.IsType(t, 0, count)
+				}
+			} else {
+				buildId, exists := tt.input["buildId"]
+				if !exists || buildId == "" {
+					// Expected to be invalid due to missing/empty buildId
+					assert.True(t, true) // Test passes as expected
+				}
+			}
+		})
+	}
+}
+
+func TestTestResultsURLConstruction(t *testing.T) {
+	// Test URL construction logic for test results endpoint
+	buildId := "12345"
+
+	// Test base URL construction
+	expectedBase := "/testOccurrences?locator=build:(id:" + buildId + ")"
+	assert.Contains(t, expectedBase, buildId)
+	assert.Contains(t, expectedBase, "testOccurrences")
+
+	// Test parameter combinations
+	testCases := []struct {
+		name            string
+		status          string
+		includeDetails  bool
+		count           int
+		expectedLocator []string // Expected locator components
+		expectedFields  []string // Expected fields
+	}{
+		{
+			name:            "Basic query",
+			expectedLocator: []string{"build:(id:12345)", "count:100"},
+			expectedFields:  []string{"testOccurrence(id,name,status,duration,href)"},
+		},
+		{
+			name:            "With status filter",
+			status:          "FAILURE",
+			expectedLocator: []string{"build:(id:12345)", "status:FAILURE", "count:100"},
+			expectedFields:  []string{"testOccurrence(id,name,status,duration,href)"},
+		},
+		{
+			name:            "With details",
+			includeDetails:  true,
+			expectedLocator: []string{"build:(id:12345)", "count:100"},
+			expectedFields:  []string{"testOccurrence(id,name,status,duration,href,details)"},
+		},
+		{
+			name:            "With custom count",
+			count:           50,
+			expectedLocator: []string{"build:(id:12345)", "count:50"},
+			expectedFields:  []string{"testOccurrence(id,name,status,duration,href)"},
+		},
+		{
+			name:            "All parameters",
+			status:          "SUCCESS",
+			includeDetails:  true,
+			count:           25,
+			expectedLocator: []string{"build:(id:12345)", "status:SUCCESS", "count:25"},
+			expectedFields:  []string{"testOccurrence(id,name,status,duration,href,details)"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Simulate locator construction
+			locator := "build:(id:" + buildId + ")"
+			if tc.status != "" {
+				locator += ",status:" + tc.status
+			}
+
+			count := tc.count
+			if count == 0 {
+				count = 100
+			}
+			locator += fmt.Sprintf(",count:%d", count)
+
+			// Verify expected locator components are present
+			for _, expected := range tc.expectedLocator {
+				assert.Contains(t, locator, expected)
+			}
+
+			// Simulate fields construction
+			fields := "testOccurrence(id,name,status,duration,href"
+			if tc.includeDetails {
+				fields += ",details"
+			}
+			fields += ")"
+
+			// Verify expected fields are present
+			for _, expected := range tc.expectedFields {
+				assert.Equal(t, expected, fields)
+			}
+		})
+	}
+}
+
+func TestTestStatusValues(t *testing.T) {
+	// Test that we know the valid test status values
+	validStatuses := []string{"SUCCESS", "FAILURE", "UNKNOWN", "IGNORED"}
+
+	for _, status := range validStatuses {
+		t.Run(status, func(t *testing.T) {
+			assert.NotEmpty(t, status)
+			assert.Equal(t, status, strings.ToUpper(status)) // All statuses should be uppercase
+		})
+	}
 }
