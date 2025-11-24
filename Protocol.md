@@ -329,14 +329,14 @@ Tools provide write operations and actions on TeamCity entities.
 
 ### fetch_build_log
 
-**Description**: Fetches the complete build log for a specific build.
+**Description**: Fetches the build log for a specific build with filtering and limiting options to handle large logs.
 
 **TeamCity Endpoint**: `GET /downloadBuildLog.html?buildId={buildId}`
 
 **Input Schema**:
 ```json
 {
-  "type": "object", 
+  "type": "object",
   "properties": {
     "buildId": {
       "type": "string",
@@ -347,17 +347,40 @@ Tools provide write operations and actions on TeamCity entities.
       "description": "Return log as plain text (optional, default: true)"
     },
     "archived": {
-      "type": "boolean", 
+      "type": "boolean",
       "description": "Return log as zip archive (optional, default: false)"
     },
     "dateFormat": {
       "type": "string",
       "description": "Custom timestamp format following Java SimpleDateFormat (optional)"
+    },
+    "maxLines": {
+      "type": "integer",
+      "description": "Maximum number of lines to return (optional, applied after filtering)"
+    },
+    "filterPattern": {
+      "type": "string",
+      "description": "Regex pattern to filter log lines (optional, only matching lines returned)"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warning", "info"],
+      "description": "Filter by severity level (optional)"
+    },
+    "tailLines": {
+      "type": "integer",
+      "description": "Return only the last N lines (optional, applied after filtering)"
     }
   },
   "required": ["buildId"]
 }
 ```
+
+**Filtering Parameters**:
+- `maxLines`: Limits the number of lines returned (applied after all other filters)
+- `filterPattern`: Regex pattern to match lines (supports full regex syntax)
+- `severity`: Filters by log level - "error" (errors/failures), "warning" (warnings), or "info" (non-error/warning lines)
+- `tailLines`: Returns only the last N lines after filtering (useful for getting recent errors)
 
 **Additional Parameters**:
 - `plain=true`: Returns the log content as plain text in the browser/response body
@@ -365,6 +388,8 @@ Tools provide write operations and actions on TeamCity entities.
 - `dateFormat=<pattern>`: Customizes timestamp format (e.g., "yyyy-MM-dd HH:mm:ss")
 
 **Example Usage**:
+
+Basic fetch with line limit:
 ```json
 {
   "jsonrpc": "2.0",
@@ -374,8 +399,41 @@ Tools provide write operations and actions on TeamCity entities.
     "name": "fetch_build_log",
     "arguments": {
       "buildId": "12345",
-      "plain": true,
-      "dateFormat": "yyyy-MM-dd HH:mm:ss"
+      "maxLines": 100
+    }
+  }
+}
+```
+
+Fetch only errors:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "fetch_build_log",
+    "arguments": {
+      "buildId": "12345",
+      "severity": "error",
+      "maxLines": 50
+    }
+  }
+}
+```
+
+Fetch with regex pattern filter:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "fetch_build_log",
+    "arguments": {
+      "buildId": "12345",
+      "filterPattern": "test.*failed",
+      "tailLines": 20
     }
   }
 }
