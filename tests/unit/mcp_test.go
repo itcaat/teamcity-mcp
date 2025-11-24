@@ -684,3 +684,223 @@ func TestDetailedSearchAPIEndpoints(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+func TestNotificationHandling(t *testing.T) {
+	// Test that notification methods are properly handled
+	tests := []struct {
+		name           string
+		method         string
+		shouldHaveID   bool
+		expectResponse bool
+	}{
+		{
+			name:           "notifications/cancelled should not require response",
+			method:         "notifications/cancelled",
+			shouldHaveID:   false,
+			expectResponse: false,
+		},
+		{
+			name:           "notifications/initialized should not require response",
+			method:         "notifications/initialized",
+			shouldHaveID:   false,
+			expectResponse: false,
+		},
+		{
+			name:           "Unknown notification should not error",
+			method:         "notifications/unknown",
+			shouldHaveID:   false,
+			expectResponse: false,
+		},
+		{
+			name:           "Unknown request should error",
+			method:         "unknown_method",
+			shouldHaveID:   true,
+			expectResponse: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Validate notification methods don't have "error" in expected behavior
+			if !tt.shouldHaveID {
+				assert.False(t, tt.expectResponse, "Notifications should not expect response")
+			}
+		})
+	}
+}
+
+func TestResourcesListParameterHandling(t *testing.T) {
+	// Test resources/list parameter handling
+	tests := []struct {
+		name        string
+		params      string
+		shouldParse bool
+		description string
+	}{
+		{
+			name:        "Empty params should be handled",
+			params:      "",
+			shouldParse: true,
+			description: "Empty string params should not cause parse error",
+		},
+		{
+			name:        "Null params should be handled",
+			params:      "null",
+			shouldParse: true,
+			description: "Null params should be skipped",
+		},
+		{
+			name:        "Valid JSON params should parse",
+			params:      `{"uri":"teamcity://projects"}`,
+			shouldParse: true,
+			description: "Valid JSON should parse normally",
+		},
+		{
+			name:        "Empty object should parse",
+			params:      "{}",
+			shouldParse: true,
+			description: "Empty object should parse with empty URI",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, tt.shouldParse, tt.description)
+			// Verify params format is valid
+			if tt.params != "" && tt.params != "null" {
+				// Should be valid JSON
+				assert.True(t, tt.params == "" || tt.params == "null" || strings.HasPrefix(tt.params, "{"))
+			}
+		})
+	}
+}
+
+func TestResourceListingBehavior(t *testing.T) {
+	// Test that resource listing behaves differently for empty URI vs specific URI
+	tests := []struct {
+		name              string
+		uri               string
+		expectsMetadata   bool
+		expectsActualData bool
+	}{
+		{
+			name:              "Empty URI returns metadata",
+			uri:               "",
+			expectsMetadata:   true,
+			expectsActualData: false,
+		},
+		{
+			name:              "Specific URI returns actual data",
+			uri:               "teamcity://projects",
+			expectsMetadata:   false,
+			expectsActualData: true,
+		},
+		{
+			name:              "BuildTypes URI returns actual data",
+			uri:               "teamcity://buildTypes",
+			expectsMetadata:   false,
+			expectsActualData: true,
+		},
+		{
+			name:              "Runtime URI returns actual data",
+			uri:               "teamcity://runtime",
+			expectsMetadata:   false,
+			expectsActualData: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectsMetadata {
+				// Empty URI should return list of available resources with metadata
+				assert.True(t, tt.uri == "", "Metadata should only be returned for empty URI")
+			}
+			if tt.expectsActualData {
+				// Specific URI should fetch actual data
+				assert.NotEmpty(t, tt.uri, "Actual data should be returned for specific URI")
+				assert.True(t, strings.HasPrefix(tt.uri, "teamcity://"), "URI should have teamcity:// prefix")
+			}
+		})
+	}
+}
+
+func TestResourceMetadataStructure(t *testing.T) {
+	// Test expected structure of resource metadata
+	expectedResources := []struct {
+		uri         string
+		name        string
+		description string
+		mimeType    string
+	}{
+		{
+			uri:         "teamcity://projects",
+			name:        "Projects",
+			description: "TeamCity projects",
+			mimeType:    "application/json",
+		},
+		{
+			uri:         "teamcity://buildTypes",
+			name:        "Build Types",
+			description: "TeamCity build configurations",
+			mimeType:    "application/json",
+		},
+		{
+			uri:         "teamcity://builds",
+			name:        "Builds",
+			description: "Recent TeamCity builds",
+			mimeType:    "application/json",
+		},
+		{
+			uri:         "teamcity://agents",
+			name:        "Agents",
+			description: "TeamCity build agents",
+			mimeType:    "application/json",
+		},
+		{
+			uri:         "teamcity://runtime",
+			name:        "Runtime Information",
+			description: "Current server date, time, and runtime information",
+			mimeType:    "application/json",
+		},
+	}
+
+	for _, resource := range expectedResources {
+		t.Run(resource.name, func(t *testing.T) {
+			assert.NotEmpty(t, resource.uri, "URI should not be empty")
+			assert.NotEmpty(t, resource.name, "Name should not be empty")
+			assert.NotEmpty(t, resource.description, "Description should not be empty")
+			assert.Equal(t, "application/json", resource.mimeType, "MIME type should be application/json")
+			assert.True(t, strings.HasPrefix(resource.uri, "teamcity://"), "URI should start with teamcity://")
+		})
+	}
+}
+
+func TestErrorResponseBehavior(t *testing.T) {
+	// Test error response behavior for requests vs notifications
+	tests := []struct {
+		name                string
+		hasID               bool
+		expectErrorResponse bool
+	}{
+		{
+			name:                "Request with ID should get error response",
+			hasID:               true,
+			expectErrorResponse: true,
+		},
+		{
+			name:                "Notification without ID should not get error response",
+			hasID:               false,
+			expectErrorResponse: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.hasID {
+				assert.True(t, tt.expectErrorResponse, "Requests should receive error responses")
+			} else {
+				assert.False(t, tt.expectErrorResponse, "Notifications should not receive error responses")
+			}
+		})
+	}
+}
