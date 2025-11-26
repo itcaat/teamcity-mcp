@@ -334,7 +334,7 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 		},
 		{
 			"name":        "fetch_build_log",
-			"description": "Fetch build log for a specific build",
+			"description": "Fetch build log for a specific build with filtering options",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -353,6 +353,23 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 					"dateFormat": map[string]interface{}{
 						"type":        "string",
 						"description": "Custom timestamp format (Java SimpleDateFormat)",
+					},
+					"maxLines": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of lines to return (limits output after filtering)",
+					},
+					"filterPattern": map[string]interface{}{
+						"type":        "string",
+						"description": "Regex pattern to filter log lines (only matching lines are returned)",
+					},
+					"severity": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by severity level: 'error', 'warning', or 'info'",
+						"enum":        []string{"error", "warning", "info"},
+					},
+					"tailLines": map[string]interface{}{
+						"type":        "integer",
+						"description": "Return only the last N lines (applied after filtering, before maxLines)",
 					},
 				},
 				"required": []string{"buildId"},

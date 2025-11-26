@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -793,10 +794,14 @@ func (c *Client) calculateDuration(startDate, endDate string) string {
 // FetchBuildLog fetches the build log for a specific build
 func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (string, error) {
 	var req struct {
-		BuildID    string `json:"buildId"`
-		Plain      *bool  `json:"plain,omitempty"`
-		Archived   *bool  `json:"archived,omitempty"`
-		DateFormat string `json:"dateFormat,omitempty"`
+		BuildID       string `json:"buildId"`
+		Plain         *bool  `json:"plain,omitempty"`
+		Archived      *bool  `json:"archived,omitempty"`
+		DateFormat    string `json:"dateFormat,omitempty"`
+		MaxLines      *int   `json:"maxLines,omitempty"`
+		FilterPattern string `json:"filterPattern,omitempty"`
+		Severity      string `json:"severity,omitempty"`
+		TailLines     *int   `json:"tailLines,omitempty"`
 	}
 
 	if err := json.Unmarshal(args, &req); err != nil {
@@ -805,6 +810,18 @@ func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (strin
 
 	if req.BuildID == "" {
 		return "", fmt.Errorf("buildId is required")
+	}
+
+	// Validate severity if provided
+	if req.Severity != "" {
+		validSeverities := map[string]bool{
+			"error":   true,
+			"warning": true,
+			"info":    true,
+		}
+		if !validSeverities[strings.ToLower(req.Severity)] {
+			return "", fmt.Errorf("invalid severity: must be 'error', 'warning', or 'info'")
+		}
 	}
 
 	start := time.Now()
@@ -877,16 +894,125 @@ func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (strin
 			req.BuildID, len(respBody)), nil
 	}
 
-	// For plain text logs, return the content directly
+	// For plain text logs, apply filtering
 	logContent := string(respBody)
+	lines := strings.Split(logContent, "\n")
+	totalLines := len(lines)
 
-	// Add some metadata about the log
-	lineCount := len(strings.Split(logContent, "\n"))
+	// Apply filters
+	filteredLines := c.applyBuildLogFilters(lines, req.FilterPattern, req.Severity)
 
-	result := fmt.Sprintf("Build log for build %s (%d lines, %d bytes):\n\n%s",
-		req.BuildID, lineCount, len(respBody), logContent)
+	// Apply tail if requested
+	if req.TailLines != nil && *req.TailLines > 0 {
+		tailCount := *req.TailLines
+		if tailCount < len(filteredLines) {
+			filteredLines = filteredLines[len(filteredLines)-tailCount:]
+		}
+	}
+
+	// Apply max lines limit
+	if req.MaxLines != nil && *req.MaxLines > 0 {
+		maxLines := *req.MaxLines
+		if maxLines < len(filteredLines) {
+			filteredLines = filteredLines[:maxLines]
+		}
+	}
+
+	// Build result
+	result := fmt.Sprintf("Build log for build %s\n", req.BuildID)
+	result += fmt.Sprintf("Total lines: %d", totalLines)
+
+	if req.FilterPattern != "" || req.Severity != "" || req.TailLines != nil {
+		result += fmt.Sprintf(", Filtered lines: %d", len(filteredLines))
+	}
+
+	result += fmt.Sprintf(", Showing: %d lines\n\n", len(filteredLines))
+
+	if len(filteredLines) > 0 {
+		result += strings.Join(filteredLines, "\n")
+	} else {
+		result += "(No lines match the specified filters)"
+	}
 
 	return result, nil
+}
+
+// applyBuildLogFilters applies pattern and severity filters to log lines
+func (c *Client) applyBuildLogFilters(lines []string, pattern string, severity string) []string {
+	filtered := lines
+
+	// Apply pattern filter
+	if pattern != "" {
+		matched := make([]string, 0)
+		// Compile regex pattern
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			// If regex compilation fails, treat as literal string search
+			for _, line := range filtered {
+				if strings.Contains(line, pattern) {
+					matched = append(matched, line)
+				}
+			}
+		} else {
+			for _, line := range filtered {
+				if re.MatchString(line) {
+					matched = append(matched, line)
+				}
+			}
+		}
+		filtered = matched
+	}
+
+	// Apply severity filter
+	if severity != "" {
+		matched := make([]string, 0)
+		severityLower := strings.ToLower(severity)
+
+		// Common patterns for different severity levels
+		errorPatterns := []string{"error", "fail", "exception", "fatal", "[e]", "[error]"}
+		warningPatterns := []string{"warn", "warning", "[w]", "[warn]"}
+
+		var patterns []string
+		switch severityLower {
+		case "error":
+			patterns = errorPatterns
+		case "warning":
+			patterns = warningPatterns
+		case "info":
+			// For info, we exclude errors and warnings
+			for _, line := range filtered {
+				lineLower := strings.ToLower(line)
+				isErrorOrWarning := false
+
+				for _, p := range append(errorPatterns, warningPatterns...) {
+					if strings.Contains(lineLower, p) {
+						isErrorOrWarning = true
+						break
+					}
+				}
+
+				if !isErrorOrWarning && strings.TrimSpace(line) != "" {
+					matched = append(matched, line)
+				}
+			}
+			filtered = matched
+			return filtered
+		}
+
+		// For error and warning filters
+		for _, line := range filtered {
+			lineLower := strings.ToLower(line)
+			for _, p := range patterns {
+				if strings.Contains(lineLower, p) {
+					matched = append(matched, line)
+					break
+				}
+			}
+		}
+		filtered = matched
+	}
+
+	return filtered
 }
 
 // SearchBuildConfigurations searches for build configurations with comprehensive filters including parameters, steps, and VCS roots

@@ -632,17 +632,21 @@ curl -X POST http://localhost:8123/mcp \
 ```
 
 ### 7. fetch_build_log
-Fetch the complete build log for a specific build.
+Fetch the build log for a specific build with filtering options to handle large logs.
 
 **Parameters:**
 - `buildId` (required): Build ID to fetch log for
 - `plain` (optional): Return log as plain text (default: true)
-- `archived` (optional): Return log as zip archive (default: false)  
+- `archived` (optional): Return log as zip archive (default: false)
 - `dateFormat` (optional): Custom timestamp format (Java SimpleDateFormat)
+- `maxLines` (optional): Maximum number of lines to return (applied after filtering)
+- `filterPattern` (optional): Regex pattern to filter log lines
+- `severity` (optional): Filter by severity level: "error", "warning", or "info"
+- `tailLines` (optional): Return only the last N lines (applied after filtering)
 
 **Examples:**
 
-Fetch plain text build log:
+Fetch only errors (limited to 50 lines):
 ```bash
 curl -X POST http://localhost:8123/mcp \
   -H "Content-Type: application/json" \
@@ -654,13 +658,15 @@ curl -X POST http://localhost:8123/mcp \
     "params": {
       "name": "fetch_build_log",
       "arguments": {
-        "buildId": "12345"
+        "buildId": "12345",
+        "severity": "error",
+        "maxLines": 50
       }
     }
   }'
 ```
 
-Fetch archived build log:
+Fetch lines matching a pattern:
 ```bash
 curl -X POST http://localhost:8123/mcp \
   -H "Content-Type: application/json" \
@@ -673,13 +679,14 @@ curl -X POST http://localhost:8123/mcp \
       "name": "fetch_build_log",
       "arguments": {
         "buildId": "12345",
-        "archived": true
+        "filterPattern": "test.*failed",
+        "maxLines": 100
       }
     }
   }'
 ```
 
-Fetch log with custom timestamp format:
+Fetch last 200 lines:
 ```bash
 curl -X POST http://localhost:8123/mcp \
   -H "Content-Type: application/json" \
@@ -692,7 +699,26 @@ curl -X POST http://localhost:8123/mcp \
       "name": "fetch_build_log",
       "arguments": {
         "buildId": "12345",
-        "dateFormat": "yyyy-MM-dd HH:mm:ss"
+        "tailLines": 200
+      }
+    }
+  }'
+```
+
+Fetch archived build log:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345",
+        "archived": true
       }
     }
   }'
