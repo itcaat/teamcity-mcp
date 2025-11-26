@@ -1138,8 +1138,8 @@ func (c *Client) getBasicBuildConfigurations(ctx context.Context, req struct {
 
 // getBuildConfigurationDetails gets detailed information for a specific build configuration
 func (c *Client) getBuildConfigurationDetails(ctx context.Context, buildTypeID string) (*DetailedBuildType, error) {
-	// Get basic build type info
-	respBody, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s", buildTypeID), nil)
+	// Get basic build type info, excluding parameters/steps/vcs-roots since we fetch them separately
+	respBody, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/buildTypes/id:%s?fields=id,name,projectName,projectId,href,webUrl,enabled,paused,template", buildTypeID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build type details: %w", err)
 	}
