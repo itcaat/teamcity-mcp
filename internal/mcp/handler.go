@@ -453,6 +453,37 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 				},
 			},
 		},
+		{
+			"name":        "get_test_results",
+			"description": "Get test results for a specific build. Returns test names, status, duration, and optionally error details/stack traces for failed tests. Use includeDetails=true to get full error messages and stack traces for debugging test failures.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"buildId": map[string]interface{}{
+						"type":        "string",
+						"description": "Build ID to get test results for (required). Example: '19333979'",
+					},
+					"status": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by test status (optional). Use 'FAILURE' to see only failed tests.",
+						"enum":        []string{"SUCCESS", "FAILURE", "UNKNOWN", "IGNORED"},
+					},
+					"includeDetails": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Include detailed error messages and stack traces for failed tests (optional, default: false). Set to true when investigating test failures.",
+						"default":     false,
+					},
+					"count": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum number of tests to return (optional, default: 100, max: 1000)",
+						"minimum":     1,
+						"maximum":     1000,
+						"default":     100,
+					},
+				},
+				"required": []string{"buildId"},
+			},
+		},
 	}
 
 	return h.successResponse(id, map[string]interface{}{
@@ -605,6 +636,8 @@ func (h *Handler) callTool(ctx context.Context, name string, args json.RawMessag
 		return h.tc.SearchBuildConfigurations(ctx, args)
 	case "get_current_time":
 		return h.getCurrentTime(ctx, args)
+	case "get_test_results":
+		return h.tc.GetTestResults(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
