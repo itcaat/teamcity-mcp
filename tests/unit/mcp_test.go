@@ -49,10 +49,12 @@ func TestToolDefinitions(t *testing.T) {
 		"search_builds",
 		"fetch_build_log",
 		"search_build_configurations",
+		"get_current_time",
+		"get_test_results",
 	}
 
 	// Validate we have the right number of tools
-	assert.Equal(t, 8, len(expectedTools))
+	assert.Equal(t, 10, len(expectedTools))
 
 	// Validate tool names are correctly formatted
 	for _, tool := range expectedTools {

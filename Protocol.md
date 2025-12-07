@@ -546,6 +546,71 @@ Fetch with regex pattern filter:
 }
 ```
 
+### get_test_results
+
+**Description**: Get test results for a specific build with optional filtering by test status and detailed information.
+
+**TeamCity Endpoint**: `GET /app/rest/testOccurrences?locator=build:(id:{buildId})[,status:{status}]&fields=testOccurrence(id,name,status,duration,href[,details])`
+
+**Input Schema**:
+```json
+{
+  "type": "object",
+  "properties": {
+    "buildId": {
+      "type": "string",
+      "description": "Build ID to get test results for (required)"
+    },
+    "status": {
+      "type": "string",
+      "description": "Filter by test status: SUCCESS, FAILURE, UNKNOWN, IGNORED (optional)"
+    },
+    "includeDetails": {
+      "type": "boolean",
+      "description": "Include test details like stack traces (optional, default: false)"
+    },
+    "count": {
+      "type": "integer",
+      "description": "Maximum number of tests to return (optional, default: 100, max: 1000)"
+    }
+  },
+  "required": ["buildId"]
+}
+```
+
+**Example Usage**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_test_results",
+    "arguments": {
+      "buildId": "12345"
+    }
+  }
+}
+```
+
+**Example with Filters**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "get_test_results",
+    "arguments": {
+      "buildId": "12345",
+      "status": "FAILURE",
+      "includeDetails": true,
+      "count": 50
+    }
+  }
+}
+```
+
 **Example Usage**:
 ```json
 {
