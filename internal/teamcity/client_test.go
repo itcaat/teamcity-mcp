@@ -97,6 +97,23 @@ func TestRenderBuildLog_StartLineBeyondEnd(t *testing.T) {
 	}
 }
 
+func TestRenderBuildLog_StartLineBeyondFilteredEnd(t *testing.T) {
+	// The filter DID match lines; only the requested page is empty. The body
+	// must report an out-of-range window, not claim that nothing matched.
+	log := "x\n[ERROR] a\nx\n[ERROR] b\nx"
+	out := renderBuildLog("42", log, buildLogView{
+		FilterPattern: `\[ERROR\]`,
+		StartLine:     intPtr(50),
+	})
+
+	if !strings.Contains(out, "Matched lines: 2") {
+		t.Errorf("expected 'Matched lines: 2', got:\n%s", firstLines(out))
+	}
+	if lines := body(t, out); len(lines) != 1 || lines[0] != "(No lines to display for the requested range)" {
+		t.Fatalf("expected empty-range message (filters matched), got %#v", lines)
+	}
+}
+
 func TestRenderBuildLog_TailLines(t *testing.T) {
 	out := renderBuildLog("42", makeLog(1000), buildLogView{TailLines: intPtr(5)})
 
@@ -106,6 +123,11 @@ func TestRenderBuildLog_TailLines(t *testing.T) {
 	}
 	if lines[0] != "line 996" || lines[4] != "line 1000" {
 		t.Fatalf("unexpected tail window: first=%q last=%q", lines[0], lines[4])
+	}
+	// The header must say the view is a tail window — "Showing lines 1-5" is
+	// relative to it, not to the whole log.
+	if !strings.Contains(out, "Tail: last 5 lines") {
+		t.Errorf("expected 'Tail: last 5 lines' in header, got:\n%s", firstLines(out))
 	}
 	// tailLines already bounds the output, so no default-cap NOTE.
 	if strings.Contains(out, "NOTE:") {
@@ -151,6 +173,10 @@ func TestRenderBuildLog_ContextLines(t *testing.T) {
 	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("context window mismatch:\n got: %#v\nwant: %#v", lines, want)
 	}
+	// Matched lines counts matches only — not context lines or "--" separators.
+	if !strings.Contains(out, "Matched lines: 2") {
+		t.Errorf("expected 'Matched lines: 2' (matches only), got:\n%s", firstLines(out))
+	}
 }
 
 func TestFilterBySeverity(t *testing.T) {
@@ -187,9 +213,9 @@ func TestFilterByPatternLiteralFallback(t *testing.T) {
 	// An invalid regex must fall back to a literal substring search rather than
 	// returning nothing.
 	log := []string{"a(b", "cd", "a(b again"}
-	got := filterByPattern(log, "a(b", 0)
-	if len(got) != 2 {
-		t.Fatalf("expected literal-substring fallback to match 2 lines, got %#v", got)
+	got, matched := filterByPattern(log, "a(b", 0)
+	if len(got) != 2 || matched != 2 {
+		t.Fatalf("expected literal-substring fallback to match 2 lines, got %#v (matched=%d)", got, matched)
 	}
 }
 

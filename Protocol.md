@@ -394,7 +394,7 @@ Tools provide write operations and actions on TeamCity entities.
 - `severity`: Filters by log level - "error" (errors/failures), "warning" (warnings), or "info" (non-error/warning lines)
 - `tailLines`: Returns only the last N lines after filtering (useful for getting recent errors)
 
-**Response**: The header reports `Total lines`, the matched count when a filter is applied, and the `Showing lines X-Y` window. When the output is truncated it includes a `NOTE:` indicating the `startLine` to request for the next page.
+**Response**: The header reports `Total lines`, the matched count when a filter is applied (`Matched lines` counts matching lines only — context lines and `--` separators are excluded), `Tail: last N lines` when `tailLines` narrows the log, and the `Showing lines X-Y` window. Line numbers in the window are relative to the filtered (and tailed) view — the same coordinates `startLine` pages over. When the output is truncated it includes a `NOTE:` indicating the `startLine` to request for the next page.
 
 **Additional Parameters**:
 - `plain=true`: Returns the log content as plain text in the browser/response body

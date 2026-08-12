@@ -940,15 +940,19 @@ func renderBuildLog(buildID, logContent string, v buildLogView) string {
 		contextLines = *v.ContextLines
 	}
 
-	// grep stage.
+	// grep stage. matchedCount counts matching lines only — context lines and
+	// "--" separators pulled in by contextLines are not matches.
 	filtersApplied := v.FilterPattern != "" || v.Severity != ""
-	filteredLines := applyBuildLogFilters(lines, v.FilterPattern, v.Severity, contextLines)
-	matchedCount := len(filteredLines)
+	filteredLines, matchedCount := applyBuildLogFilters(lines, v.FilterPattern, v.Severity, contextLines)
 
-	// tail stage: keep the last N of the (filtered) log.
+	// tail stage: keep the last N of the (filtered) log. tailKept > 0 records
+	// that the view was narrowed to a tail window, so the header can say so —
+	// "Showing lines X-Y" is relative to that window, not the whole log.
+	tailKept := 0
 	if v.TailLines != nil && *v.TailLines > 0 {
 		if tailCount := *v.TailLines; tailCount < len(filteredLines) {
 			filteredLines = filteredLines[len(filteredLines)-tailCount:]
+			tailKept = tailCount
 		}
 	}
 
@@ -995,6 +999,9 @@ func renderBuildLog(buildID, logContent string, v buildLogView) string {
 	if filtersApplied {
 		fmt.Fprintf(&b, ", Matched lines: %d", matchedCount)
 	}
+	if tailKept > 0 {
+		fmt.Fprintf(&b, ", Tail: last %d lines", tailKept)
+	}
 	if shown > 0 {
 		fmt.Fprintf(&b, ", Showing lines %d-%d", startLine, startLine+shown-1)
 	} else {
@@ -1017,9 +1024,11 @@ func renderBuildLog(buildID, logContent string, v buildLogView) string {
 	switch {
 	case shown > 0:
 		b.WriteString(strings.Join(filteredLines, "\n"))
-	case filtersApplied:
+	case filtersApplied && matchedCount == 0:
 		b.WriteString("(No lines match the specified filters)")
 	default:
+		// Lines exist (or no filter was set) but the requested window is empty —
+		// e.g. startLine paged past the end. Don't claim nothing matched.
 		b.WriteString("(No lines to display for the requested range)")
 	}
 
@@ -1028,16 +1037,18 @@ func renderBuildLog(buildID, logContent string, v buildLogView) string {
 
 // applyBuildLogFilters applies severity and pattern (grep) filters to log lines.
 // Severity is applied first so that pattern context lines are drawn from the
-// remaining set.
-func applyBuildLogFilters(lines []string, pattern, severity string, contextLines int) []string {
+// remaining set. The second return value is the number of matching lines —
+// with contextLines > 0 the returned slice also carries context lines and "--"
+// separators, which are not matches and must not be reported as such.
+func applyBuildLogFilters(lines []string, pattern, severity string, contextLines int) ([]string, int) {
 	filtered := lines
 	if severity != "" {
 		filtered = filterBySeverity(filtered, severity)
 	}
 	if pattern != "" {
-		filtered = filterByPattern(filtered, pattern, contextLines)
+		return filterByPattern(filtered, pattern, contextLines)
 	}
-	return filtered
+	return filtered, len(filtered)
 }
 
 // filterBySeverity keeps only lines matching the requested severity. "info"
@@ -1079,8 +1090,9 @@ func filterBySeverity(lines []string, severity string) []string {
 // filterByPattern keeps lines matching pattern (regex, falling back to literal
 // substring on a compile error). When contextLines > 0 each match also pulls in
 // that many surrounding lines, with a "--" separator between non-adjacent
-// blocks, mirroring `grep -C`.
-func filterByPattern(lines []string, pattern string, contextLines int) []string {
+// blocks, mirroring `grep -C`. The second return value counts matching lines
+// only, excluding context lines and separators.
+func filterByPattern(lines []string, pattern string, contextLines int) ([]string, int) {
 	re, reErr := regexp.Compile(pattern)
 	matches := func(s string) bool {
 		if reErr != nil {
@@ -1096,16 +1108,16 @@ func filterByPattern(lines []string, pattern string, contextLines int) []string 
 				out = append(out, line)
 			}
 		}
-		return out
+		return out, len(out)
 	}
 
 	include := make([]bool, len(lines))
-	found := false
+	matchCount := 0
 	for i, line := range lines {
 		if !matches(line) {
 			continue
 		}
-		found = true
+		matchCount++
 		lo := i - contextLines
 		if lo < 0 {
 			lo = 0
@@ -1118,8 +1130,8 @@ func filterByPattern(lines []string, pattern string, contextLines int) []string 
 			include[j] = true
 		}
 	}
-	if !found {
-		return []string{}
+	if matchCount == 0 {
+		return []string{}, 0
 	}
 
 	out := make([]string, 0)
@@ -1134,7 +1146,7 @@ func filterByPattern(lines []string, pattern string, contextLines int) []string 
 		out = append(out, lines[i])
 		lastIncluded = i
 	}
-	return out
+	return out, matchCount
 }
 
 // containsAny reports whether s contains any of the given substrings.

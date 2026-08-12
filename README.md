@@ -648,7 +648,7 @@ Build logs routinely run to hundreds of thousands of lines. Returning them whole
 - `severity` (optional): Filter by severity level: "error", "warning", or "info"
 - `tailLines` (optional): Return only the last N lines (applied after filtering, before `startLine`/`maxLines`)
 
-The response header reports `Total lines`, the matched count (when a filter is used), and the `Showing lines X-Y` window. When output is truncated it includes a `NOTE:` with the `startLine` to request the next page.
+The response header reports `Total lines`, the matched count when a filter is used (`Matched lines` counts matching lines only — context lines and `--` separators are excluded), `Tail: last N lines` when `tailLines` narrows the log, and the `Showing lines X-Y` window (line numbers are relative to the filtered/tailed view — the same coordinates `startLine` pages over). When output is truncated it includes a `NOTE:` with the `startLine` to request the next page.
 
 **Examples:**
 
