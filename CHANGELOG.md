@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Build Log Chunked Pagination**: `fetch_build_log` can now be paged through in chunks instead of returning the entire log at once
+  - New `startLine` parameter: 1-based offset into the (filtered) log; combine with `maxLines` to page through large logs
+  - New `contextLines` parameter: include surrounding context around each `filterPattern` match, like `grep -C`
+  - Response header now reports the `Showing lines X-Y` window and, when truncated, a `NOTE:` with the `startLine` for the next page
 - **Runtime Date/Time Support**: Added comprehensive current date/time functionality to prevent AI models from using training data dates
   - New `teamcity://runtime` resource providing current server date, time, and timezone information
   - New `get_current_time` tool with flexible formatting and timezone support
@@ -18,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit tests covering all new functionality
 
 ### Changed
+- **Build Log Default Cap**: `fetch_build_log` now caps output at 500 lines by default (previously returned the whole log, overloading model context). Set `maxLines: 0` to opt out and return everything; explicit `maxLines`/`tailLines` are respected as before.
 - Updated Protocol.md with documentation for new runtime resource and get_current_time tool
 - Updated README.md to include new tool in the count (9 tools total) and usage examples
 - Enhanced server initialization to include current time information in serverInfo

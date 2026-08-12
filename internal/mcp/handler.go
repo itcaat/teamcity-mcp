@@ -334,7 +334,7 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 		},
 		{
 			"name":        "fetch_build_log",
-			"description": "Fetch build log for a specific build with filtering options",
+			"description": "Fetch a build log with filtering and chunked pagination. Build logs can be hundreds of thousands of lines; by default the output is capped (500 lines) to avoid overloading context. Page through the log with startLine/maxLines, or narrow it with filterPattern/severity. Set maxLines to 0 to return the entire log.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -356,11 +356,21 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 					},
 					"maxLines": map[string]interface{}{
 						"type":        "integer",
-						"description": "Maximum number of lines to return (limits output after filtering)",
+						"description": "Maximum number of lines to return (page size), applied after filtering. Defaults to 500 when unset. Set to 0 (or negative) to return everything.",
+					},
+					"startLine": map[string]interface{}{
+						"type":        "integer",
+						"description": "1-based line offset into the (filtered) log to start from — use with maxLines to page through the log in chunks. Default: 1.",
+						"minimum":     1,
 					},
 					"filterPattern": map[string]interface{}{
 						"type":        "string",
-						"description": "Regex pattern to filter log lines (only matching lines are returned)",
+						"description": "Regex pattern to grep the log (only matching lines are returned; falls back to literal substring match if the regex is invalid)",
+					},
+					"contextLines": map[string]interface{}{
+						"type":        "integer",
+						"description": "Lines of surrounding context to include around each filterPattern match (like grep -C). Default: 0.",
+						"minimum":     0,
 					},
 					"severity": map[string]interface{}{
 						"type":        "string",
@@ -369,7 +379,7 @@ func (h *Handler) handleToolsList(id interface{}) (interface{}, error) {
 					},
 					"tailLines": map[string]interface{}{
 						"type":        "integer",
-						"description": "Return only the last N lines (applied after filtering, before maxLines)",
+						"description": "Return only the last N lines (applied after filtering, before startLine/maxLines)",
 					},
 				},
 				"required": []string{"buildId"},
