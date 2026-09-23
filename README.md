@@ -632,19 +632,65 @@ curl -X POST http://localhost:8123/mcp \
 ```
 
 ### 7. fetch_build_log
-Fetch the build log for a specific build with filtering options to handle large logs.
+Fetch the build log for a specific build with filtering and **chunked pagination** to handle large logs.
+
+Build logs routinely run to hundreds of thousands of lines. Returning them whole overloads a model's context, so by default the output is **capped at 500 lines**. Page through the log with `startLine`/`maxLines`, narrow it with `filterPattern`/`severity`, or set `maxLines: 0` to force the entire log.
 
 **Parameters:**
 - `buildId` (required): Build ID to fetch log for
 - `plain` (optional): Return log as plain text (default: true)
 - `archived` (optional): Return log as zip archive (default: false)
 - `dateFormat` (optional): Custom timestamp format (Java SimpleDateFormat)
-- `maxLines` (optional): Maximum number of lines to return (applied after filtering)
-- `filterPattern` (optional): Regex pattern to filter log lines
+- `maxLines` (optional): Maximum number of lines to return — the page size, applied after filtering. Defaults to `500` when unset; set to `0` (or negative) to return everything.
+- `startLine` (optional): 1-based line offset into the (filtered) log to start from. Combine with `maxLines` to page through the log in chunks. Default: `1`.
+- `filterPattern` (optional): Regex pattern to grep the log (only matching lines are returned; falls back to literal substring match if the regex is invalid)
+- `contextLines` (optional): Lines of surrounding context to include around each `filterPattern` match, like `grep -C`. Default: `0`.
 - `severity` (optional): Filter by severity level: "error", "warning", or "info"
-- `tailLines` (optional): Return only the last N lines (applied after filtering)
+- `tailLines` (optional): Return only the last N lines (applied after filtering, before `startLine`/`maxLines`)
+
+The response header reports `Total lines`, the matched count when a filter is used (`Matched lines` counts matching lines only — context lines and `--` separators are excluded), `Tail: last N lines` when `tailLines` narrows the log, and the `Showing lines X-Y` window (line numbers are relative to the filtered/tailed view — the same coordinates `startLine` pages over). When output is truncated it includes a `NOTE:` with the `startLine` to request the next page.
 
 **Examples:**
+
+Page through the log in 500-line chunks (second page):
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345",
+        "startLine": 501,
+        "maxLines": 500
+      }
+    }
+  }'
+```
+
+Grep for a pattern with 5 lines of surrounding context:
+```bash
+curl -X POST http://localhost:8123/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "tools/call",
+    "params": {
+      "name": "fetch_build_log",
+      "arguments": {
+        "buildId": "12345",
+        "filterPattern": "OutOfMemoryError",
+        "contextLines": 5
+      }
+    }
+  }'
+```
 
 Fetch only errors (limited to 50 lines):
 ```bash

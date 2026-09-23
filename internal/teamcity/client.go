@@ -18,6 +18,13 @@ import (
 	"github.com/itcaat/teamcity-mcp/internal/metrics"
 )
 
+// defaultBuildLogMaxLines caps how many log lines fetch_build_log returns when
+// the caller does not constrain the output (no maxLines, no tailLines). Build
+// logs routinely run to hundreds of thousands of lines; returning them whole
+// overloads the model context. Callers that genuinely want the full log can
+// opt out with maxLines <= 0.
+const defaultBuildLogMaxLines = 500
+
 // Client wraps the TeamCity REST API client
 type Client struct {
 	httpClient *http.Client
@@ -802,6 +809,8 @@ func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (strin
 		FilterPattern string `json:"filterPattern,omitempty"`
 		Severity      string `json:"severity,omitempty"`
 		TailLines     *int   `json:"tailLines,omitempty"`
+		StartLine     *int   `json:"startLine,omitempty"`
+		ContextLines  *int   `json:"contextLines,omitempty"`
 	}
 
 	if err := json.Unmarshal(args, &req); err != nil {
@@ -894,125 +903,260 @@ func (c *Client) FetchBuildLog(ctx context.Context, args json.RawMessage) (strin
 			req.BuildID, len(respBody)), nil
 	}
 
-	// For plain text logs, apply filtering
-	logContent := string(respBody)
+	// For plain text logs, apply filtering + pagination and render the result.
+	view := buildLogView{
+		FilterPattern: req.FilterPattern,
+		Severity:      req.Severity,
+		ContextLines:  req.ContextLines,
+		TailLines:     req.TailLines,
+		StartLine:     req.StartLine,
+		MaxLines:      req.MaxLines,
+	}
+	return renderBuildLog(req.BuildID, string(respBody), view), nil
+}
+
+// buildLogView captures the caller-supplied filtering/pagination options for a
+// build log. Kept separate from the JSON request struct so the rendering logic
+// is pure and unit-testable without an HTTP round-trip.
+type buildLogView struct {
+	FilterPattern string
+	Severity      string
+	ContextLines  *int
+	TailLines     *int
+	StartLine     *int
+	MaxLines      *int
+}
+
+// renderBuildLog filters, paginates and formats a raw build log for return to
+// the caller. Ordering: grep filters (severity + pattern) -> tail -> startLine
+// offset -> line cap. When the caller constrains nothing, a default cap keeps
+// an unbounded log from overloading the model context.
+func renderBuildLog(buildID, logContent string, v buildLogView) string {
 	lines := strings.Split(logContent, "\n")
 	totalLines := len(lines)
 
-	// Apply filters
-	filteredLines := c.applyBuildLogFilters(lines, req.FilterPattern, req.Severity)
+	contextLines := 0
+	if v.ContextLines != nil && *v.ContextLines > 0 {
+		contextLines = *v.ContextLines
+	}
 
-	// Apply tail if requested
-	if req.TailLines != nil && *req.TailLines > 0 {
-		tailCount := *req.TailLines
-		if tailCount < len(filteredLines) {
+	// grep stage. matchedCount counts matching lines only — context lines and
+	// "--" separators pulled in by contextLines are not matches.
+	filtersApplied := v.FilterPattern != "" || v.Severity != ""
+	filteredLines, matchedCount := applyBuildLogFilters(lines, v.FilterPattern, v.Severity, contextLines)
+
+	// tail stage: keep the last N of the (filtered) log. tailKept > 0 records
+	// that the view was narrowed to a tail window, so the header can say so —
+	// "Showing lines X-Y" is relative to that window, not the whole log.
+	tailKept := 0
+	if v.TailLines != nil && *v.TailLines > 0 {
+		if tailCount := *v.TailLines; tailCount < len(filteredLines) {
 			filteredLines = filteredLines[len(filteredLines)-tailCount:]
+			tailKept = tailCount
 		}
 	}
 
-	// Apply max lines limit
-	if req.MaxLines != nil && *req.MaxLines > 0 {
-		maxLines := *req.MaxLines
-		if maxLines < len(filteredLines) {
-			filteredLines = filteredLines[:maxLines]
+	// startLine stage: 1-based offset into the current set for chunked paging.
+	startLine := 1
+	if v.StartLine != nil && *v.StartLine > 1 {
+		startLine = *v.StartLine
+		if offset := startLine - 1; offset < len(filteredLines) {
+			filteredLines = filteredLines[offset:]
+		} else {
+			filteredLines = nil
 		}
 	}
 
-	// Build result
-	result := fmt.Sprintf("Build log for build %s\n", req.BuildID)
-	result += fmt.Sprintf("Total lines: %d", totalLines)
-
-	if req.FilterPattern != "" || req.Severity != "" || req.TailLines != nil {
-		result += fmt.Sprintf(", Filtered lines: %d", len(filteredLines))
+	// cap stage: decide how many lines we are allowed to emit.
+	limit := len(filteredLines)
+	unbounded := false
+	defaultCap := false
+	switch {
+	case v.MaxLines != nil && *v.MaxLines > 0:
+		limit = *v.MaxLines
+	case v.MaxLines != nil: // <= 0 => caller explicitly wants the whole thing
+		unbounded = true
+	case v.TailLines != nil && *v.TailLines > 0:
+		// tail already bounds the output; leave limit == len
+	default:
+		limit = defaultBuildLogMaxLines
+		defaultCap = true
 	}
 
-	result += fmt.Sprintf(", Showing: %d lines\n\n", len(filteredLines))
-
-	if len(filteredLines) > 0 {
-		result += strings.Join(filteredLines, "\n")
+	truncated := false
+	if !unbounded && limit < len(filteredLines) {
+		filteredLines = filteredLines[:limit]
+		truncated = true
 	} else {
-		result += "(No lines match the specified filters)"
+		defaultCap = false
+	}
+	shown := len(filteredLines)
+
+	// Header.
+	var b strings.Builder
+	fmt.Fprintf(&b, "Build log for build %s\n", buildID)
+	fmt.Fprintf(&b, "Total lines: %d", totalLines)
+	if filtersApplied {
+		fmt.Fprintf(&b, ", Matched lines: %d", matchedCount)
+	}
+	if tailKept > 0 {
+		fmt.Fprintf(&b, ", Tail: last %d lines", tailKept)
+	}
+	if shown > 0 {
+		fmt.Fprintf(&b, ", Showing lines %d-%d", startLine, startLine+shown-1)
+	} else {
+		b.WriteString(", Showing: 0 lines")
+	}
+	b.WriteString("\n")
+
+	if truncated {
+		nextStart := startLine + shown
+		if defaultCap {
+			fmt.Fprintf(&b, "NOTE: output capped at %d lines (default). More lines available — "+
+				"page with startLine=%d, raise maxLines, or narrow with filterPattern/severity. "+
+				"Set maxLines=0 to return the entire log.\n", limit, nextStart)
+		} else {
+			fmt.Fprintf(&b, "NOTE: more lines available — page with startLine=%d.\n", nextStart)
+		}
+	}
+	b.WriteString("\n")
+
+	switch {
+	case shown > 0:
+		b.WriteString(strings.Join(filteredLines, "\n"))
+	case filtersApplied && matchedCount == 0:
+		b.WriteString("(No lines match the specified filters)")
+	default:
+		// Lines exist (or no filter was set) but the requested window is empty —
+		// e.g. startLine paged past the end. Don't claim nothing matched.
+		b.WriteString("(No lines to display for the requested range)")
 	}
 
-	return result, nil
+	return b.String()
 }
 
-// applyBuildLogFilters applies pattern and severity filters to log lines
-func (c *Client) applyBuildLogFilters(lines []string, pattern string, severity string) []string {
+// applyBuildLogFilters applies severity and pattern (grep) filters to log lines.
+// Severity is applied first so that pattern context lines are drawn from the
+// remaining set. The second return value is the number of matching lines —
+// with contextLines > 0 the returned slice also carries context lines and "--"
+// separators, which are not matches and must not be reported as such.
+func applyBuildLogFilters(lines []string, pattern, severity string, contextLines int) ([]string, int) {
 	filtered := lines
-
-	// Apply pattern filter
-	if pattern != "" {
-		matched := make([]string, 0)
-		// Compile regex pattern
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			// If regex compilation fails, treat as literal string search
-			for _, line := range filtered {
-				if strings.Contains(line, pattern) {
-					matched = append(matched, line)
-				}
-			}
-		} else {
-			for _, line := range filtered {
-				if re.MatchString(line) {
-					matched = append(matched, line)
-				}
-			}
-		}
-		filtered = matched
-	}
-
-	// Apply severity filter
 	if severity != "" {
-		matched := make([]string, 0)
-		severityLower := strings.ToLower(severity)
+		filtered = filterBySeverity(filtered, severity)
+	}
+	if pattern != "" {
+		return filterByPattern(filtered, pattern, contextLines)
+	}
+	return filtered, len(filtered)
+}
 
-		// Common patterns for different severity levels
-		errorPatterns := []string{"error", "fail", "exception", "fatal", "[e]", "[error]"}
-		warningPatterns := []string{"warn", "warning", "[w]", "[warn]"}
+// filterBySeverity keeps only lines matching the requested severity. "info"
+// keeps non-empty lines that are neither errors nor warnings.
+func filterBySeverity(lines []string, severity string) []string {
+	matched := make([]string, 0)
 
-		var patterns []string
-		switch severityLower {
-		case "error":
-			patterns = errorPatterns
-		case "warning":
-			patterns = warningPatterns
-		case "info":
-			// For info, we exclude errors and warnings
-			for _, line := range filtered {
-				lineLower := strings.ToLower(line)
-				isErrorOrWarning := false
+	// Common substrings for different severity levels.
+	errorPatterns := []string{"error", "fail", "exception", "fatal", "[e]", "[error]"}
+	warningPatterns := []string{"warn", "warning", "[w]", "[warn]"}
 
-				for _, p := range append(errorPatterns, warningPatterns...) {
-					if strings.Contains(lineLower, p) {
-						isErrorOrWarning = true
-						break
-					}
-				}
-
-				if !isErrorOrWarning && strings.TrimSpace(line) != "" {
-					matched = append(matched, line)
-				}
-			}
-			filtered = matched
-			return filtered
-		}
-
-		// For error and warning filters
-		for _, line := range filtered {
-			lineLower := strings.ToLower(line)
-			for _, p := range patterns {
-				if strings.Contains(lineLower, p) {
-					matched = append(matched, line)
-					break
-				}
+	switch strings.ToLower(severity) {
+	case "error":
+		for _, line := range lines {
+			if containsAny(strings.ToLower(line), errorPatterns) {
+				matched = append(matched, line)
 			}
 		}
-		filtered = matched
+	case "warning":
+		for _, line := range lines {
+			if containsAny(strings.ToLower(line), warningPatterns) {
+				matched = append(matched, line)
+			}
+		}
+	case "info":
+		excluded := append(append([]string{}, errorPatterns...), warningPatterns...)
+		for _, line := range lines {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if !containsAny(strings.ToLower(line), excluded) {
+				matched = append(matched, line)
+			}
+		}
+	}
+	return matched
+}
+
+// filterByPattern keeps lines matching pattern (regex, falling back to literal
+// substring on a compile error). When contextLines > 0 each match also pulls in
+// that many surrounding lines, with a "--" separator between non-adjacent
+// blocks, mirroring `grep -C`. The second return value counts matching lines
+// only, excluding context lines and separators.
+func filterByPattern(lines []string, pattern string, contextLines int) ([]string, int) {
+	re, reErr := regexp.Compile(pattern)
+	matches := func(s string) bool {
+		if reErr != nil {
+			return strings.Contains(s, pattern)
+		}
+		return re.MatchString(s)
 	}
 
-	return filtered
+	if contextLines <= 0 {
+		out := make([]string, 0)
+		for _, line := range lines {
+			if matches(line) {
+				out = append(out, line)
+			}
+		}
+		return out, len(out)
+	}
+
+	include := make([]bool, len(lines))
+	matchCount := 0
+	for i, line := range lines {
+		if !matches(line) {
+			continue
+		}
+		matchCount++
+		lo := i - contextLines
+		if lo < 0 {
+			lo = 0
+		}
+		hi := i + contextLines
+		if hi > len(lines)-1 {
+			hi = len(lines) - 1
+		}
+		for j := lo; j <= hi; j++ {
+			include[j] = true
+		}
+	}
+	if matchCount == 0 {
+		return []string{}, 0
+	}
+
+	out := make([]string, 0)
+	lastIncluded := -1
+	for i := range lines {
+		if !include[i] {
+			continue
+		}
+		if lastIncluded >= 0 && i-lastIncluded > 1 {
+			out = append(out, "--")
+		}
+		out = append(out, lines[i])
+		lastIncluded = i
+	}
+	return out, matchCount
+}
+
+// containsAny reports whether s contains any of the given substrings.
+func containsAny(s string, substrings []string) bool {
+	for _, sub := range substrings {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 // SearchBuildConfigurations searches for build configurations with comprehensive filters including parameters, steps, and VCS roots

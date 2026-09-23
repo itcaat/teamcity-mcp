@@ -107,6 +107,17 @@ func TestFetchBuildLogTool(t *testing.T) {
 				"filterPattern": "error",
 				"severity":      "error",
 				"tailLines":     50,
+				"startLine":     1,
+				"contextLines":  3,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid with pagination parameters",
+			input: map[string]interface{}{
+				"buildId":   "12345",
+				"startLine": 501,
+				"maxLines":  500,
 			},
 			valid: true,
 		},

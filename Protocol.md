@@ -329,7 +329,7 @@ Tools provide write operations and actions on TeamCity entities.
 
 ### fetch_build_log
 
-**Description**: Fetches the build log for a specific build with filtering and limiting options to handle large logs.
+**Description**: Fetches the build log for a specific build with filtering and chunked pagination to handle large logs. By default the output is capped at 500 lines so an unbounded call cannot overload the model context; page through the log with `startLine`/`maxLines`, narrow it with `filterPattern`/`severity`, or set `maxLines: 0` to return the whole log.
 
 **TeamCity Endpoint**: `GET /downloadBuildLog.html?buildId={buildId}`
 
@@ -356,11 +356,21 @@ Tools provide write operations and actions on TeamCity entities.
     },
     "maxLines": {
       "type": "integer",
-      "description": "Maximum number of lines to return (optional, applied after filtering)"
+      "description": "Maximum number of lines to return / page size (optional, applied after filtering). Defaults to 500; set to 0 to return everything."
+    },
+    "startLine": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based line offset into the (filtered) log to start from (optional, default 1). Combine with maxLines to paginate."
     },
     "filterPattern": {
       "type": "string",
-      "description": "Regex pattern to filter log lines (optional, only matching lines returned)"
+      "description": "Regex pattern to filter log lines (optional, only matching lines returned; falls back to literal substring match if the regex is invalid)"
+    },
+    "contextLines": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Lines of surrounding context around each filterPattern match, like grep -C (optional, default 0)"
     },
     "severity": {
       "type": "string",
@@ -369,18 +379,22 @@ Tools provide write operations and actions on TeamCity entities.
     },
     "tailLines": {
       "type": "integer",
-      "description": "Return only the last N lines (optional, applied after filtering)"
+      "description": "Return only the last N lines (optional, applied after filtering, before startLine/maxLines)"
     }
   },
   "required": ["buildId"]
 }
 ```
 
-**Filtering Parameters**:
-- `maxLines`: Limits the number of lines returned (applied after all other filters)
-- `filterPattern`: Regex pattern to match lines (supports full regex syntax)
+**Filtering & Pagination Parameters**:
+- `maxLines`: Page size — limits the number of lines returned (applied last). Defaults to `500` when unset; set to `0` (or negative) to return the entire log.
+- `startLine`: 1-based offset into the filtered log to start from. Use with `maxLines` to page through large logs in chunks.
+- `filterPattern`: Regex pattern to match lines (supports full regex syntax; falls back to literal substring match on an invalid regex)
+- `contextLines`: Number of surrounding lines to include around each `filterPattern` match, like `grep -C`. Non-adjacent blocks are separated by a `--` line.
 - `severity`: Filters by log level - "error" (errors/failures), "warning" (warnings), or "info" (non-error/warning lines)
 - `tailLines`: Returns only the last N lines after filtering (useful for getting recent errors)
+
+**Response**: The header reports `Total lines`, the matched count when a filter is applied (`Matched lines` counts matching lines only — context lines and `--` separators are excluded), `Tail: last N lines` when `tailLines` narrows the log, and the `Showing lines X-Y` window. Line numbers in the window are relative to the filtered (and tailed) view — the same coordinates `startLine` pages over. When the output is truncated it includes a `NOTE:` indicating the `startLine` to request for the next page.
 
 **Additional Parameters**:
 - `plain=true`: Returns the log content as plain text in the browser/response body
@@ -434,6 +448,23 @@ Fetch with regex pattern filter:
       "buildId": "12345",
       "filterPattern": "test.*failed",
       "tailLines": 20
+    }
+  }
+}
+```
+
+Paginate through the log in 500-line chunks (second page):
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "fetch_build_log",
+    "arguments": {
+      "buildId": "12345",
+      "startLine": 501,
+      "maxLines": 500
     }
   }
 }
