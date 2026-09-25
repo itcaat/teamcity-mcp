@@ -1183,6 +1183,25 @@ func (c *Client) SearchBuildConfigurations(ctx context.Context, args json.RawMes
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 
+	hasAdvancedFilter := req.IncludeDetails || req.ParameterName != "" || req.ParameterValue != "" ||
+		req.StepType != "" || req.StepName != "" || req.VcsType != ""
+	hasBasicFilter := req.ProjectID != "" || req.Name != "" || req.Enabled != nil ||
+		req.Paused != nil || req.Template != nil
+
+	// Guard against the N+1 foot-gun: advanced filters require fetching FULL details for every
+	// configuration returned by the basic query (4 sub-requests per config). With no basic filter
+	// the basic query returns up to `count` (default 100) configs, so a naive "find by parameterValue"
+	// call expands into ~400 sequential TeamCity API requests and routinely hangs for minutes. Require
+	// the caller to narrow the search server-side.
+	if hasAdvancedFilter && !hasBasicFilter {
+		return "", fmt.Errorf(
+			"search_build_configurations: advanced filters (parameterName/parameterValue/stepType/stepName/vcsType/includeDetails) " +
+				"require at least one basic filter (projectId/name/enabled/paused/template) to narrow the result set. " +
+				"Without one, every matching configuration is fetched in detail, which is slow and unbounded. " +
+				"Prefer calling with a specific projectId or name; or use list_build_types for a project-scoped listing.",
+		)
+	}
+
 	start := time.Now()
 	defer func() {
 		metrics.RecordTeamCityRequest("search_build_configurations", "success", time.Since(start).Seconds())
@@ -1198,9 +1217,12 @@ func (c *Client) SearchBuildConfigurations(ctx context.Context, args json.RawMes
 
 	// For each configuration, check detailed criteria if requested
 	for _, config := range basicConfigs {
-		if req.IncludeDetails || req.ParameterName != "" || req.ParameterValue != "" ||
-			req.StepType != "" || req.StepName != "" || req.VcsType != "" {
-
+		// Bail early if the surrounding context (request/MCP call) has been cancelled — without this
+		// we keep firing TeamCity sub-requests for cancelled work.
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if hasAdvancedFilter {
 			detailed, err := c.getBuildConfigurationDetails(ctx, config.ID)
 			if err != nil {
 				c.logger.Warn("Failed to get details for build configuration", "id", config.ID, "error", err)
